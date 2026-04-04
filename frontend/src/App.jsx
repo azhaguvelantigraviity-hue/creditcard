@@ -12,6 +12,8 @@ import Attendance from './pages/Attendance';
 import Sales from './pages/Sales';
 import Calls from './pages/Calls';
 import Incentives from './pages/Incentives';
+import Permission from './pages/Permission';
+import Settings from './pages/Settings';
 
 // Layouts
 import DashboardLayout from './layouts/DashboardLayout';
@@ -41,6 +43,8 @@ const App = () => {
                     <Route path="/calls" element={<ProtectedRoute><Calls /></ProtectedRoute>} />
                     <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
                     <Route path="/incentives" element={<ProtectedRoute><Incentives /></ProtectedRoute>} />
+                    <Route path="/permission" element={<ProtectedRoute><Permission /></ProtectedRoute>} />
+                    <Route path="/settings" element={<ProtectedRoute roles={['admin']}><Settings /></ProtectedRoute>} />
                     
                     <Route path="*" element={<Navigate to="/" />} />
                 </Routes>

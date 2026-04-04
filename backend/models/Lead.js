@@ -18,6 +18,11 @@ const leadSchema = new mongoose.Schema({
         enum: ['New', 'Interested', 'Not Interested', 'Converted', 'Follow Up'],
         default: 'New'
     },
+    cardType: {
+        type: String,
+        enum: ['Card 1', 'Card 2', 'Card 3'],
+        default: 'Card 1'
+    },
     assignedTo: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',

@@ -1,5 +1,6 @@
 const Sale = require('../models/Sale');
 const Incentive = require('../models/Incentive');
+const OfficeSettings = require('../models/OfficeSettings');
 
 // @desc    Track a new successful sale
 // @route   POST /api/sales
@@ -16,14 +17,6 @@ const createSale = async (req, res) => {
             amount,
             status,
             date
-        });
-
-        // Automatically create a pending incentive for this sale
-        await Incentive.create({
-            saleId: sale._id,
-            sellerId: req.user._id,
-            amount: 1500, // Standard fee
-            status: 'Pending'
         });
 
         res.status(201).json(sale);
@@ -60,12 +53,23 @@ const updateSaleStatus = async (req, res) => {
             sale.status = req.body.status || sale.status;
             const updatedSale = await sale.save();
 
-            // If sale is approved, update the corresponding incentive to Credited
+            // Create incentive record for every approved sale (₹200 per card)
             if (updatedSale.status === 'Approved') {
+                const incentivePerCard = 200;
+
                 await Incentive.findOneAndUpdate(
                     { saleId: updatedSale._id },
-                    { status: 'Credited', payoutDate: new Date() }
+                    { 
+                        sellerId: updatedSale.sellerId,
+                        amount: incentivePerCard, 
+                        status: 'Credited', 
+                        payoutDate: new Date() 
+                    },
+                    { upsert: true, new: true }
                 );
+            } else {
+                // If sale is no longer approved, remove incentive
+                await Incentive.findOneAndDelete({ saleId: updatedSale._id });
             }
 
             res.json(updatedSale);

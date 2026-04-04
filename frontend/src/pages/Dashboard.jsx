@@ -10,7 +10,11 @@ import {
     ArrowDownRight,
     Clock,
     ShieldCheck,
-    PhoneCall
+    PhoneCall,
+    Wallet,
+    CreditCard,
+    Award,
+    IndianRupee
 } from 'lucide-react';
 import { 
     BarChart, 
@@ -81,6 +85,8 @@ const Dashboard = () => {
     const isAdmin = user?.role === 'admin';
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [incentives, setIncentives] = useState([]);
+    const [incentivesLoading, setIncentivesLoading] = useState(true);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -93,7 +99,20 @@ const Dashboard = () => {
                 setLoading(false);
             }
         };
+
+        const fetchIncentives = async () => {
+            try {
+                const { data } = await api.get('/incentives/dashboard-summary');
+                setIncentives(data);
+            } catch (error) {
+                console.error('Error fetching incentive summary:', error);
+            } finally {
+                setIncentivesLoading(false);
+            }
+        };
+
         fetchStats();
+        fetchIncentives();
     }, []);
 
     if (loading) return (
@@ -101,6 +120,11 @@ const Dashboard = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sbi-blue"></div>
         </div>
     );
+
+    // Compute totals for incentive summary cards
+    const totalCardsSold = incentives.reduce((sum, i) => sum + i.cardsSold, 0);
+    const totalIncentiveAmt = incentives.reduce((sum, i) => sum + i.totalIncentive, 0);
+    const totalPending = incentives.reduce((sum, i) => sum + i.pendingIncentive, 0);
 
     return (
         <div className="space-y-8 pb-10">
@@ -208,8 +232,151 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Incentives Summary Section */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 overflow-hidden">
+                {/* Section Header */}
+                <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                            <Award size={22} />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100">Incentives Overview</h2>
+                            <p className="text-sm text-gray-500 dark:text-slate-400">
+                                {isAdmin ? 'All sellers performance & earnings' : 'Your sales incentive summary'}
+                            </p>
+                        </div>
+                    </div>
+                    {/* Quick stat chips */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-bold border border-blue-100 dark:border-blue-500/20">
+                            <CreditCard size={13} />
+                            {totalCardsSold} Cards Sold
+                        </div>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 rounded-lg text-xs font-bold border border-green-100 dark:border-green-500/20">
+                            <Wallet size={13} />
+                            ₹{totalIncentiveAmt.toLocaleString()} Total
+                        </div>
+                        {totalPending > 0 && (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 rounded-lg text-xs font-bold border border-orange-100 dark:border-orange-500/20">
+                                <Clock size={13} />
+                                ₹{totalPending.toLocaleString()} Pending
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Incentives Table */}
+                <div className="overflow-x-auto">
+                    {incentivesLoading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sbi-blue"></div>
+                        </div>
+                    ) : incentives.length > 0 ? (
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="border-b border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/80">
+                                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest text-left">Seller Name</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest text-center">Daily Goal (10)</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest text-center">Cards Sold</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest text-center">Pending</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest text-right">Total Earnings</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
+                                {incentives.map((item) => (
+                                    <tr key={item._id} className="hover:bg-blue-50/30 dark:hover:bg-slate-700/50 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-slate-700 dark:to-slate-600 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold text-sm shadow-inner border border-white dark:border-slate-500">
+                                                    {item.sellerName?.charAt(0) || 'S'}
+                                                </div>
+                                                <div>
+                                                    <span className="font-bold text-gray-900 dark:text-slate-100 block leading-tight">{item.sellerName}</span>
+                                                    <span className="text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Sales Executive</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col gap-1.5 w-32 mx-auto">
+                                                <div className="flex items-center justify-between text-[10px] font-bold">
+                                                    <span className={item.dailyCount >= item.dailyTarget ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}>
+                                                        {item.dailyCount || 0}/{item.dailyTarget || 10}
+                                                    </span>
+                                                    <span className="text-gray-400">
+                                                        {Math.round(((item.dailyCount || 0) / (item.dailyTarget || 10)) * 100)}%
+                                                    </span>
+                                                </div>
+                                                <div className="h-1 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden border border-gray-200/50 dark:border-slate-600/30">
+                                                    <div 
+                                                        className={`h-full rounded-full transition-all duration-1000 ${item.dailyCount >= item.dailyTarget ? 'bg-green-500' : 'bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.4)]'}`}
+                                                        style={{ width: `${Math.min(((item.dailyCount || 0) / (item.dailyTarget || 10)) * 100, 100)}%` }}
+                                                    ></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 font-bold text-sm border border-blue-100 dark:border-blue-500/20">
+                                                <CreditCard size={13} className="opacity-60" />
+                                                {item.cardsSold}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            {item.pendingIncentive > 0 ? (
+                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-sm border border-orange-100 dark:border-orange-500/20">
+                                                    <Clock size={13} className="opacity-60" />
+                                                    ₹{item.pendingIncentive.toLocaleString()}
+                                                </span>
+                                            ) : (
+                                                <span className="text-sm font-medium text-gray-400 dark:text-slate-500">—</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="text-lg font-black text-gray-900 dark:text-slate-100 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors tracking-tight">
+                                                ₹{item.totalIncentive.toLocaleString()}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            {/* Footer totals row */}
+                            <tfoot>
+                                <tr className="border-t-2 border-gray-200 dark:border-slate-600 bg-gray-50/80 dark:bg-slate-800/80">
+                                    <td className="px-6 py-4">
+                                        <span className="font-black text-gray-900 dark:text-slate-100 uppercase text-xs tracking-wider">
+                                            {isAdmin ? `Total (${incentives.length} Sellers)` : 'Your Total'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="font-black text-gray-900 dark:text-slate-100 text-sm">{totalCardsSold}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="font-bold text-gray-500 dark:text-slate-400 text-sm">₹200</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="font-black text-orange-600 dark:text-orange-400 text-sm">₹{totalPending.toLocaleString()}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className="text-lg font-black text-green-600 dark:text-green-400">₹{totalIncentiveAmt.toLocaleString()}</span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    ) : (
+                        <div className="text-center py-16">
+                            <div className="w-16 h-16 bg-gray-50 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto text-gray-300 dark:text-slate-500 mb-4">
+                                <Wallet size={32} />
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-1">No incentive data yet</h3>
+                            <p className="text-sm text-gray-500 dark:text-slate-400">Incentive data will appear once card sales are approved.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };
 
 export default Dashboard;
+

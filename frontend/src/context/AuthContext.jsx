@@ -32,6 +32,14 @@ export const AuthProvider = ({ children }) => {
         return data;
     };
 
+    const faceLogin = async (descriptor) => {
+        const { data } = await api.post('/auth/face-login', { descriptor });
+        localStorage.setItem('sbiToken', data.token);
+        localStorage.setItem('user', JSON.stringify(data));
+        setUser(data);
+        return data;
+    };
+
     const logout = () => {
         localStorage.removeItem('sbiToken');
         localStorage.removeItem('user');
@@ -39,7 +47,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, faceLogin, logout, loading }}>
             {children}
         </AuthContext.Provider>
     );

@@ -12,8 +12,12 @@ import {
     UserPlus,
     X,
     Filter,
-    CheckCircle
+    CheckCircle,
+    Camera,
+    RefreshCw,
+    ScanFace
 } from 'lucide-react';
+import * as faceService from '../services/faceService';
 
 const Modal = ({ isOpen, onClose, title, children }) => {
     if (!isOpen) return null;
@@ -31,6 +35,12 @@ const Users = () => {
     const [filterRole, setFilterRole] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
+    const [faceCaptureUser, setFaceCaptureUser] = useState(null);
+    const [isCameraLoading, setIsCameraLoading] = useState(false);
+    const [isCapturing, setIsCapturing] = useState(false);
+    const videoRef = React.useRef(null);
+    
     const [selectedUser, setSelectedUser] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
@@ -41,6 +51,12 @@ const Users = () => {
         password: ''
     });
     const [tempPassword, setTempPassword] = useState('');
+    const [capturedDescriptor, setCapturedDescriptor] = useState(null);
+    const [isCameraActive, setIsCameraActive] = useState(false);
+
+    useEffect(() => {
+        faceService.loadModels();
+    }, []);
 
     useEffect(() => {
         fetchUsers();
@@ -74,6 +90,61 @@ const Users = () => {
         setIsModalOpen(true);
     };
 
+    const handleFaceRegisterClick = async (user) => {
+        setFaceCaptureUser(user);
+        setIsFaceModalOpen(true);
+        startCamera();
+    };
+
+    const startCamera = async () => {
+        setIsCameraLoading(true);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { width: 640, height: 480, facingMode: 'user' } 
+            });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
+        } catch (err) {
+            console.error("Camera access error:", err);
+            alert("Could not access camera. Please check permissions.");
+            setIsFaceModalOpen(false);
+        } finally {
+            setIsCameraLoading(false);
+        }
+    };
+
+    const stopCamera = () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            const tracks = videoRef.current.srcObject.getTracks();
+            tracks.forEach(track => track.stop());
+            videoRef.current.srcObject = null;
+        }
+    };
+
+    const captureFace = async () => {
+        if (!videoRef.current) return;
+        setIsCapturing(true);
+        try {
+            const descriptor = await faceService.getFaceDescriptor(videoRef.current);
+            if (descriptor) {
+                await api.put(`/users/${faceCaptureUser._id}/face`, { 
+                    descriptor: Array.from(descriptor) 
+                });
+                alert("Face registered successfully!");
+                stopCamera();
+                setIsFaceModalOpen(false);
+                fetchUsers();
+            } else {
+                alert("No face detected. Please position yourself clearly and try again.");
+            }
+        } catch (error) {
+            alert(error.response?.data?.message || 'Error registering face');
+        } finally {
+            setIsCapturing(false);
+        }
+    };
+
     const handleUpdateStaff = async (e) => {
         e.preventDefault();
         try {
@@ -90,9 +161,15 @@ const Users = () => {
     const handleAddStaff = async (e) => {
         e.preventDefault();
         try {
-            const { data } = await api.post('/users', formData);
+            const { data } = await api.post('/users', {
+                ...formData,
+                faceDescriptor: capturedDescriptor ? Array.from(capturedDescriptor) : []
+            });
             setTempPassword(data.tempPassword);
             fetchUsers();
+            stopCamera();
+            setIsCameraActive(false);
+            setCapturedDescriptor(null);
         } catch (error) {
             alert(error.response?.data?.message || 'Error adding staff');
         }
@@ -230,6 +307,17 @@ const Users = () => {
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={() => handleFaceRegisterClick(user)} 
+                                                title={user.faceDescriptor?.length > 0 ? "Update Face Recognition" : "Register Face Recognition"}
+                                                className={`p-2 rounded-lg transition-colors ${
+                                                    user.faceDescriptor?.length > 0 
+                                                    ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-500/10' 
+                                                    : 'text-gray-400 hover:text-sbi-blue hover:bg-blue-50 dark:hover:bg-blue-500/10'
+                                                }`}
+                                            >
+                                                <ScanFace size={18} />
+                                            </button>
                                             <button onClick={() => handleEditClick(user)} className="p-2 text-gray-400 hover:text-sbi-blue hover:bg-blue-50 dark:bg-blue-500/10 rounded-lg transition-colors">
                                                 <Edit size={18} />
                                             </button>
@@ -245,13 +333,21 @@ const Users = () => {
                 </div>
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedUser ? 'Edit Staff Member' : 'Add New Staff Member'}>
+            <Modal isOpen={isModalOpen} onClose={() => { 
+                setIsModalOpen(false); 
+                stopCamera(); 
+                setIsCameraActive(false); 
+                setCapturedDescriptor(null); 
+            }} title={selectedUser ? 'Edit Staff Member' : 'Add New Staff Member'}>
                 <div className="relative bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-8 overflow-y-auto max-h-[90vh] custom-scrollbar">
                     <button 
                         onClick={() => {
                             setIsModalOpen(false);
                             setTempPassword('');
                             setFormData({ name: '', email: '', role: 'seller', status: 'active', phoneNumber: '', password: '' });
+                            stopCamera();
+                            setIsCameraActive(false);
+                            setCapturedDescriptor(null);
                         }}
                         className="absolute right-6 top-6 text-gray-400 hover:text-gray-600 dark:text-slate-400 transition-colors"
                     >
@@ -280,6 +376,9 @@ const Users = () => {
                                     setIsModalOpen(false);
                                     setTempPassword('');
                                     setFormData({ name: '', email: '', role: 'seller', status: 'active', phoneNumber: '', password: '' });
+                                    stopCamera();
+                                    setIsCameraActive(false);
+                                    setCapturedDescriptor(null);
                                 }}
                                 className="w-full mt-6 bg-sbi-blue text-white py-3 rounded-xl font-bold hover:bg-sbi-hover transition-colors"
                             >
@@ -368,11 +467,153 @@ const Users = () => {
                                 />
                             </div>
 
-                            <button type="submit" className="w-full bg-sbi-blue text-white py-4 rounded-xl font-bold text-lg hover:bg-sbi-hover transition-all transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-blue-100 mt-4">
+                            {!selectedUser && (
+                                <div className="p-5 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-2xl space-y-4 mb-4">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+                                            <ScanFace size={18} className="text-sbi-blue" />
+                                            Face Registration
+                                        </h3>
+                                        {capturedDescriptor && (
+                                            <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase">Captured</span>
+                                        )}
+                                    </div>
+
+                                    {!isCameraActive && !capturedDescriptor ? (
+                                        <button 
+                                            type="button"
+                                            onClick={() => { setIsCameraActive(true); startCamera(); }}
+                                            className="w-full py-2.5 bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm font-semibold text-gray-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <Camera size={16} />
+                                            Enable Face Detection
+                                        </button>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {isCameraActive && (
+                                                <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden border border-gray-800 shadow-inner">
+                                                    <video 
+                                                        ref={videoRef}
+                                                        autoPlay 
+                                                        muted 
+                                                        playsInline
+                                                        className="w-full h-full object-cover scale-x-[-1]"
+                                                    />
+                                                    <div className="absolute inset-0 border-2 border-sbi-blue/30 rounded-xl pointer-events-none">
+                                                        <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-sbi-blue"></div>
+                                                        <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-sbi-blue"></div>
+                                                        <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-sbi-blue"></div>
+                                                        <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-sbi-blue"></div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    type="button"
+                                                    disabled={isCapturing || !isCameraActive}
+                                                    onClick={async () => {
+                                                        const desc = await faceService.getFaceDescriptor(videoRef.current);
+                                                        if (desc) {
+                                                            setCapturedDescriptor(desc);
+                                                            setIsCameraActive(false);
+                                                            stopCamera();
+                                                        } else {
+                                                            alert("No face detected. Please try again.");
+                                                        }
+                                                    }}
+                                                    className="flex-1 py-3 bg-sbi-blue text-white rounded-xl text-sm font-bold hover:bg-sbi-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                                >
+                                                    {isCapturing ? <RefreshCw className="animate-spin" size={16} /> : <Camera size={16} />}
+                                                    {capturedDescriptor ? 'Re-capture Face' : 'Capture Face'}
+                                                </button>
+                                                {(isCameraActive || capturedDescriptor) && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            stopCamera();
+                                                            setIsCameraActive(false);
+                                                            setCapturedDescriptor(null);
+                                                        }}
+                                                        className="px-4 py-3 border border-gray-200 dark:border-gray-800 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                                                    >
+                                                        Reset
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <button type="submit" className="w-full bg-sbi-blue text-white py-4 rounded-xl font-bold text-lg hover:bg-sbi-hover transition-all transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-blue-100">
                                 {selectedUser ? 'Save Changes' : 'Save Staff Member'}
                             </button>
                         </form>
                     )}
+                </div>
+            </Modal>
+
+            {/* Face Registration Modal */}
+            <Modal isOpen={isFaceModalOpen} onClose={() => { stopCamera(); setIsFaceModalOpen(false); }} title="Face Recognition Setup">
+                <div className="relative bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-8 overflow-hidden">
+                    <button 
+                        onClick={() => { stopCamera(); setIsFaceModalOpen(false); }}
+                        className="absolute right-6 top-6 text-gray-400 hover:text-gray-600 dark:text-slate-400 transition-colors z-10"
+                    >
+                        <X size={24} />
+                    </button>
+
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">Register Face</h2>
+                    <p className="text-gray-500 dark:text-slate-400 text-sm mb-6">
+                        Setting up face login for <span className="font-bold text-sbi-blue">{faceCaptureUser?.name}</span>.
+                    </p>
+
+                    <div className="relative aspect-video bg-slate-900 rounded-2xl overflow-hidden mb-6 flex items-center justify-center group">
+                        <video 
+                            ref={videoRef}
+                            autoPlay 
+                            muted 
+                            playsInline
+                            className="w-full h-full object-cover scale-x-[-1]"
+                        />
+                        {isCameraLoading && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
+                                <RefreshCw className="text-white animate-spin" size={32} />
+                            </div>
+                        )}
+                        <div className="absolute inset-0 border-2 border-sbi-blue/30 rounded-2xl pointer-events-none group-hover:border-sbi-blue/60 transition-colors duration-500">
+                             {/* Scanning frame corners */}
+                             <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-sbi-blue"></div>
+                             <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-sbi-blue"></div>
+                             <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-sbi-blue"></div>
+                             <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-sbi-blue"></div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <p className="text-xs text-center text-gray-400 dark:text-slate-500 px-4">
+                            Ensure the room is well-lit and the person's head is fully visible in the frame.
+                        </p>
+                        
+                        <button 
+                            onClick={captureFace}
+                            disabled={isCapturing || isCameraLoading}
+                            className="w-full bg-sbi-blue hover:bg-sbi-hover text-white py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95 shadow-lg shadow-blue-100 dark:shadow-none"
+                        >
+                            {isCapturing ? (
+                                <>
+                                    <RefreshCw className="animate-spin" size={20} />
+                                    <span>Processing...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Camera size={20} />
+                                    <span>Capture Face Embedding</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </Modal>
         </div>

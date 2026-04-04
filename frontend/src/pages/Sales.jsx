@@ -107,7 +107,7 @@ const Sales = () => {
                         onClick={() => navigate('/incentives')}
                         className="bg-sbi-blue hover:bg-sbi-hover text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
                     >
-                        <Award size={18} />
+                        <CreditCard size={18} />
                         <span>View Incentives</span>
                     </button>
                 </div>
@@ -249,7 +249,11 @@ const Sales = () => {
                                 <tr key={idx} className="hover:bg-blue-50 dark:bg-blue-500/10 transition-colors">
                                     <td className="px-6 py-4 text-sm font-bold text-sbi-blue underline cursor-pointer">{sale.id}</td>
                                     <td className="px-6 py-4 text-sm font-bold text-gray-800 dark:text-slate-100">{sale.name}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-400">{sale.card}</td>
+                                    <td className="px-6 py-4">
+                                        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-1 rounded-md font-black uppercase tracking-widest border border-slate-200 dark:border-slate-700 shadow-sm">
+                                            {sale.card}
+                                        </span>
+                                    </td>
                                     <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-400">{sale.seller}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold">

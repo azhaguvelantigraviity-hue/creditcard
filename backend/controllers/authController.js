@@ -49,29 +49,6 @@ const loginUser = async (req, res) => {
         const user = await User.findOne({ email });
 
         if (user && (await user.matchPassword(password))) {
-            // New: Automated Attendance Tracking
-            if (user.role === 'seller') {
-                const today = new Date().toISOString().split('T')[0];
-                let attendance = await Attendance.findOne({ userId: user._id, date: today });
-                
-                if (!attendance) {
-                    await Attendance.create({
-                        userId: user._id,
-                        date: today,
-                        loginTime: new Date(),
-                        mode: 'remote', // Defaulting to remote for auth-based login
-                        status: 'On Time', // Initial status
-                        isActive: true
-                    });
-                } else if (!attendance.isActive) {
-                    // Re-activate if they logged back in after a logout same day
-                    attendance.isActive = true;
-                    attendance.loginTime = new Date();
-                    attendance.logoutTime = undefined;
-                    await attendance.save();
-                }
-            }
-
             res.json({
                 _id: user._id,
                 name: user.name,
@@ -89,29 +66,63 @@ const loginUser = async (req, res) => {
     }
 };
 
+// Helper to calculate Euclidean distance between two descriptors
+const getDistance = (descriptor1, descriptor2) => {
+    if (descriptor1.length !== descriptor2.length) return Infinity;
+    let sum = 0;
+    for (let i = 0; i < descriptor1.length; i++) {
+        sum += Math.pow(descriptor1[i] - descriptor2[i], 2);
+    }
+    return Math.sqrt(sum);
+};
+
+// @desc    Auth user via face descriptor
+// @route   POST /api/auth/face-login
+// @access  Public
+const faceLogin = async (req, res) => {
+    const { descriptor } = req.body;
+
+    if (!descriptor || !Array.isArray(descriptor)) {
+        return res.status(400).json({ message: 'Invalid face descriptor' });
+    }
+
+    try {
+        const users = await User.find({ status: 'active', faceDescriptor: { $exists: true, $not: { $size: 0 } } });
+        
+        let bestMatch = null;
+        let minDistance = 0.6; // Threshold for face matching
+
+        for (const user of users) {
+            const distance = getDistance(descriptor, user.faceDescriptor);
+            if (distance < minDistance) {
+                minDistance = distance;
+                bestMatch = user;
+            }
+        }
+
+        if (bestMatch) {
+            res.json({
+                _id: bestMatch._id,
+                name: bestMatch.name,
+                email: bestMatch.email,
+                role: bestMatch.role,
+                phoneNumber: bestMatch.phoneNumber,
+                profilePic: bestMatch.profilePic,
+                token: generateToken(bestMatch._id)
+            });
+        } else {
+            res.status(401).json({ message: 'Face not recognized. Please use password login or contact admin.' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Logout user & update attendance
 // @route   POST /api/auth/logout
 // @access  Private
 const logoutUser = async (req, res) => {
     try {
-        const today = new Date().toISOString().split('T')[0];
-        const attendance = await Attendance.findOne({ 
-            userId: req.user._id, 
-            date: today, 
-            isActive: true 
-        });
-
-        if (attendance) {
-            const logoutTime = new Date();
-            const workingMs = logoutTime - attendance.loginTime;
-            const workingMinutes = Math.floor(workingMs / 60000);
-            
-            attendance.logoutTime = logoutTime;
-            attendance.isActive = false;
-            attendance.totalWorkingMinutes = Math.max(0, workingMinutes - (attendance.totalOutsideMinutes || 0));
-            await attendance.save();
-        }
-
         res.json({ message: 'Logged out successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -148,6 +159,7 @@ const generateToken = (id) => {
 module.exports = {
     registerUser,
     loginUser,
+    faceLogin,
     logoutUser,
     getUserProfile
 };

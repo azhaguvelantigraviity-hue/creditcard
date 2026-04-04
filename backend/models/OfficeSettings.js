@@ -28,6 +28,10 @@ const officeSettingsSchema = new mongoose.Schema({
     autoLogoutTime: {
         type: String,
         default: '18:30' // Auto logout at 6:30 PM
+    },
+    dailyTarget: {
+        type: Number,
+        default: 10 // Daily card sales target
     }
 }, {
     timestamps: true

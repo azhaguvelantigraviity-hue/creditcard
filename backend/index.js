@@ -13,6 +13,7 @@ const statsRoutes = require('./routes/statsRoutes');
 const callLogRoutes = require('./routes/callLogRoutes');
 const userRoutes = require('./routes/userRoutes');
 const incentiveRoutes = require('./routes/incentiveRoutes');
+const permissionRoutes = require('./routes/permissionRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,7 @@ app.use('/api/sales', salesRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/incentives', incentiveRoutes);
+app.use('/api/permissions', permissionRoutes);
 
 // Test endpoint
 app.get('/api/test', (req, res) => {

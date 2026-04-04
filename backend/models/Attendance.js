@@ -41,6 +41,10 @@ const attendanceSchema = new mongoose.Schema({
     totalOutsideMinutes: {
         type: Number,
         default: 0 // personal breaks deducted
+    },
+    logoutReason: {
+        type: String,
+        enum: ['Personal', 'Official']
     }
 }, {
     timestamps: true

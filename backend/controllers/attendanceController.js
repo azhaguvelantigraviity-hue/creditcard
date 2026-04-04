@@ -94,6 +94,7 @@ const logoutAttendance = async (req, res) => {
             return res.status(404).json({ message: 'No active attendance session found for today.' });
         }
 
+        const { logoutReason } = req.body;
         const logoutTime = new Date();
         const workingMs = logoutTime - attendance.loginTime;
         const workingMinutes = Math.floor(workingMs / 60000);
@@ -112,6 +113,7 @@ const logoutAttendance = async (req, res) => {
         const totalOutsideMinutes = personalLogs.reduce((sum, log) => sum + (log.durationMinutes || 0), 0);
 
         attendance.logoutTime = logoutTime;
+        attendance.logoutReason = logoutReason;
         attendance.isActive = false;
         attendance.totalWorkingMinutes = Math.max(0, workingMinutes - totalOutsideMinutes);
         attendance.totalOutsideMinutes = totalOutsideMinutes;
@@ -267,13 +269,14 @@ const updateOfficeSettings = async (req, res) => {
         let settings = await OfficeSettings.findOne();
         if (!settings) settings = new OfficeSettings();
 
-        const { officeLat, officeLng, geofenceRadius, lateThreshold, halfDayThreshold, autoLogoutTime } = req.body;
+        const { officeLat, officeLng, geofenceRadius, lateThreshold, halfDayThreshold, autoLogoutTime, dailyTarget } = req.body;
         if (officeLat !== undefined) settings.officeLat = officeLat;
         if (officeLng !== undefined) settings.officeLng = officeLng;
         if (geofenceRadius !== undefined) settings.geofenceRadius = geofenceRadius;
         if (lateThreshold) settings.lateThreshold = lateThreshold;
         if (halfDayThreshold) settings.halfDayThreshold = halfDayThreshold;
         if (autoLogoutTime) settings.autoLogoutTime = autoLogoutTime;
+        if (dailyTarget !== undefined) settings.dailyTarget = dailyTarget;
 
         await settings.save();
         res.json({ message: 'Settings updated', settings });

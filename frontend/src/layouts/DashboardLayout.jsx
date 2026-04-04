@@ -18,7 +18,8 @@ import {
     Phone,
     Coins,
     Sun,
-    Moon
+    Moon,
+    Shield
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -51,9 +52,15 @@ const DashboardLayout = ({ children }) => {
         { name: 'Tasks', icon: CheckSquare, path: '/tasks', roles: ['admin', 'seller'] },
         { name: 'Sales Success', icon: TrendingUp, path: '/sales', roles: ['admin', 'seller'] },
         { name: 'Incentives', icon: Coins, path: '/incentives', roles: ['admin', 'seller'] },
+        { name: 'Permission', icon: Shield, path: '/permission', roles: ['admin', 'seller'] },
+        { name: 'Settings', icon: AlignLeft, path: '/settings', roles: ['admin'] },
     ];
 
-    const filteredMenu = menuItems.filter(item => item.roles.includes(user?.role));
+    const filteredMenu = menuItems.filter(item => {
+        if (!user || !user.role) return false;
+        const userRole = user.role.toLowerCase();
+        return item.roles.some(role => role.toLowerCase() === userRole);
+    });
 
     const handleLogout = async () => {
         try {
@@ -69,10 +76,10 @@ const DashboardLayout = ({ children }) => {
         <div className="flex h-screen bg-sbi-light dark:bg-slate-950 transition-colors duration-300">
             {/* Sidebar */}
             <aside className={cn(
-                "bg-slate-900 dark:bg-slate-950 border-r border-slate-800 text-white w-64 flex-shrink-0 transition-all duration-300 ease-in-out fixed lg:relative z-40 h-full shadow-xl",
+                "bg-slate-900 dark:bg-slate-950 border-r border-slate-800 text-white w-64 flex-shrink-0 transition-all duration-300 ease-in-out fixed lg:relative z-40 h-full shadow-xl flex flex-col",
                 !isSidebarOpen && "-translate-x-full lg:translate-x-0 lg:w-20"
             )}>
-                <div className="flex items-center justify-between p-4 border-b border-white/5 min-h-[64px]">
+                <div className="flex items-center justify-between p-4 border-b border-white/5 min-h-[64px] flex-shrink-0">
                     <div className={cn("font-bold text-xl flex items-center gap-2 tracking-wide", !isSidebarOpen && "hidden")}>
                         <div className="w-8 h-8 flex-shrink-0 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/30">SBI</div>
                         <span className="bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">Sales Manager</span>
@@ -88,18 +95,9 @@ const DashboardLayout = ({ children }) => {
                     >
                         {isSidebarOpen ? <ChevronLeft size={24} /> : <ChevronRight size={24} />}
                     </button>
-                    
-                    {!isSidebarOpen && (
-                        <button
-                            onClick={() => setIsSidebarOpen(true)}
-                            className="lg:hidden p-1.5 mx-auto rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
-                        >
-                            <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/30">SBI</div>
-                        </button>
-                    )}
                 </div>
 
-                <nav className="mt-6 px-2 space-y-2">
+                <nav className="flex-1 overflow-y-auto px-2 py-6 space-y-2 scrollbar-none hover:scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                     {filteredMenu.map((item) => (
                         <NavLink
                             key={item.name}
@@ -118,7 +116,7 @@ const DashboardLayout = ({ children }) => {
                     ))}
                 </nav>
 
-                <div className="absolute bottom-0 w-full p-4 space-y-4 bg-transparent border-t border-white/5">
+                <div className="p-4 space-y-4 bg-transparent border-t border-white/5 flex-shrink-0">
                     <button 
                         onClick={handleLogout}
                         className="flex items-center w-full p-3 rounded-xl text-slate-300 hover:bg-red-500/20 hover:text-red-400 transition-all duration-200 border border-transparent hover:border-red-500/30"

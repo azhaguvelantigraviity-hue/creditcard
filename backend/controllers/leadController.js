@@ -4,7 +4,7 @@ const Lead = require('../models/Lead');
 // @route   POST /api/leads
 // @access  Private
 const createLead = async (req, res) => {
-    const { name, phoneNumber, email, status, assignedTo, notes } = req.body;
+    const { name, phoneNumber, email, status, assignedTo, notes, cardType } = req.body;
 
     try {
         const lead = await Lead.create({
@@ -13,7 +13,8 @@ const createLead = async (req, res) => {
             email,
             status,
             assignedTo,
-            notes: notes ? [{ text: notes }] : []
+            notes: notes ? [{ text: notes }] : [],
+            cardType
         });
 
         res.status(201).json(lead);

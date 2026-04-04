@@ -17,7 +17,7 @@ const getUsers = async (req, res) => {
 // @access  Private/Admin
 const createUser = async (req, res) => {
     try {
-        const { name, email, role, phoneNumber, status } = req.body;
+        const { name, email, role, phoneNumber, status, faceDescriptor } = req.body;
 
         const userExists = await User.findOne({ email });
 
@@ -34,7 +34,8 @@ const createUser = async (req, res) => {
             password, 
             role: role || 'seller',
             phoneNumber: phoneNumber || '0000000000',
-            status: status || 'Active'
+            status: status || 'active',
+            faceDescriptor: faceDescriptor || []
         });
 
         if (user) {
@@ -100,9 +101,35 @@ const deleteUser = async (req, res) => {
     }
 };
 
+// @desc    Update user face descriptor
+// @route   PUT /api/users/:id/face
+// @access  Private/Admin
+const updateFaceDescriptor = async (req, res) => {
+    const { descriptor } = req.body;
+
+    if (!descriptor || !Array.isArray(descriptor)) {
+        return res.status(400).json({ message: 'Invalid face descriptor' });
+    }
+
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (user) {
+            user.faceDescriptor = descriptor;
+            await user.save();
+            res.json({ message: 'Face descriptor updated successfully' });
+        } else {
+            res.status(404).json({ message: 'User not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getUsers,
     createUser,
     updateUser,
-    deleteUser
+    deleteUser,
+    updateFaceDescriptor
 };

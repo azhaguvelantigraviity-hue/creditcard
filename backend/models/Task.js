@@ -28,6 +28,10 @@ const taskSchema = new mongoose.Schema({
         enum: ['High', 'Medium', 'Low'],
         default: 'Medium'
     },
+    targetCards: {
+        type: Number,
+        default: 0
+    },
     status: {
         type: String,
         enum: ['Pending', 'Completed', 'In Progress', 'Cancelled'],

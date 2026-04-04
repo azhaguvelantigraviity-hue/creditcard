@@ -64,7 +64,8 @@ const Leads = () => {
         phoneNumber: '',
         status: 'New',
         assignedTo: '',
-        notes: ''
+        notes: '',
+        cardType: 'Card 1'
     });
 
     // Modals state
@@ -136,7 +137,7 @@ const Leads = () => {
             await api.post('/leads', payload);
             setIsModalOpen(false);
             fetchLeads();
-            setFormData({ name: '', email: '', phoneNumber: '', status: 'New', assignedTo: '', notes: '' });
+            setFormData({ name: '', email: '', phoneNumber: '', status: 'New', assignedTo: '', notes: '', cardType: 'Card 1' });
         } catch (error) {
             alert(error.response?.data?.message || 'Error adding lead');
         }
@@ -208,6 +209,9 @@ const Leads = () => {
                                 <div>
                                     <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
                                         {lead.name}
+                                        <span className="text-[10px] bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-500/30 uppercase tracking-tighter ml-1">
+                                            {lead.cardType || 'Card 1'}
+                                        </span>
                                         <ChevronRight size={14} className="text-gray-300" />
                                     </h3>
                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
@@ -372,6 +376,14 @@ const Leads = () => {
                             </select>
                         </div>
                     )}
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">List Type (Card Category)</label>
+                        <select name="cardType" value={formData.cardType} onChange={handleInputChange} className="w-full p-3 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue bg-white dark:bg-slate-950 font-bold">
+                            <option value="Card 1">Card 1</option>
+                            <option value="Card 2">Card 2</option>
+                            <option value="Card 3">Card 3</option>
+                        </select>
+                    </div>
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Initial Notes</label>
                         <textarea name="notes" value={formData.notes} onChange={handleInputChange} className="w-full p-3 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue h-24" placeholder="Any special requirements?" />

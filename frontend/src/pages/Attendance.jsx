@@ -10,6 +10,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+import LogoutReasonModal from '../components/LogoutReasonModal';
+import FaceScannerModal from '../components/FaceScannerModal';
+
 // ─── Helpers ────────────────────────────────────────────────────
 const formatTime = (date) => {
     if (!date) return '—';
@@ -128,6 +131,10 @@ const StaffView = () => {
     const [openMovement, setOpenMovement] = useState(null);
     const [isInsideOffice, setIsInsideOffice] = useState(true);
     const [showExitModal, setShowExitModal] = useState(false);
+    const [showLogoutReasonModal, setShowLogoutReasonModal] = useState(false);
+    const [showLogoutFaceScanner, setShowLogoutFaceScanner] = useState(false);
+    const [showLoginFaceScanner, setShowLoginFaceScanner] = useState(false);
+    const [logoutReason, setLogoutReason] = useState('');
     const [geoError, setGeoError] = useState('');
     const [loginError, setLoginError] = useState('');
     const [loading, setLoading] = useState(true);
@@ -180,8 +187,12 @@ const StaffView = () => {
             const now = new Date();
             const logoutH = parseInt((settings?.autoLogoutTime || '18:30').split(':')[0]);
             const logoutM = parseInt((settings?.autoLogoutTime || '18:30').split(':')[1]);
-            if (now.getHours() >= logoutH && now.getMinutes() >= logoutM) {
-                await handleLogout();
+            const currentTotalMin = now.getHours() * 60 + now.getMinutes();
+            const logoutTotalMin = logoutH * 60 + logoutM;
+            
+            if (currentTotalMin >= logoutTotalMin) {
+                // Auto logout assumes 'Official' and skips face for automated process
+                finalizeLogout('Official');
             }
         }, 60000);
         return () => clearInterval(autoCheck);
@@ -230,7 +241,9 @@ const StaffView = () => {
         );
     });
 
-    const handleLogin = async () => {
+    const [tempLocation, setTempLocation] = useState({});
+
+    const handleLoginInitiate = async () => {
         setLoginError('');
         setActionLoading(true);
         try {
@@ -244,23 +257,51 @@ const StaffView = () => {
                     locationData = { lat: loc.lat, lng: loc.lng };
                 } catch (_) {}
             }
-            const { data } = await api.post('/attendance/login', { mode, ...locationData });
-            setSession(data.attendance);
-            setIsInsideOffice(true);
+            setTempLocation(locationData);
+            setShowLoginFaceScanner(true);
         } catch (err) {
             setLoginError(err.response?.data?.message || 'Login failed. Please try again.');
+        } finally {
+            setActionLoading(true); // stay loading until face verify or cancel
+        }
+    };
+
+    const handleLoginFaceVerify = async (descriptor) => {
+        try {
+            const { data } = await api.post('/attendance/login', { mode, ...tempLocation, faceDescriptor: descriptor });
+            setSession(data.attendance);
+            setIsInsideOffice(true);
+            setShowLoginFaceScanner(false);
+        } catch (err) {
+            setLoginError(err.response?.data?.message || 'Verification failed.');
         } finally {
             setActionLoading(false);
         }
     };
 
-    const handleLogout = async () => {
+    const handleLoginCancel = () => {
+        setShowLoginFaceScanner(false);
+        setActionLoading(false);
+    };
+
+    const handleLogoutInitiate = () => {
+        setShowLogoutReasonModal(true);
+    };
+
+    const handleLogoutReasonSubmit = (reason) => {
+        setLogoutReason(reason);
+        setShowLogoutReasonModal(false);
+        setShowLogoutFaceScanner(true);
+    };
+
+    const finalizeLogout = async (reason) => {
         setActionLoading(true);
         try {
-            const { data } = await api.post('/attendance/logout', {});
+            const { data } = await api.post('/attendance/logout', { logoutReason: reason });
             setSession(data.attendance);
             setOpenMovement(null);
             fetchMovementLogs();
+            setShowLogoutFaceScanner(false);
         } catch (err) {
             console.error(err);
         } finally {
@@ -303,6 +344,29 @@ const StaffView = () => {
                 <ExitReasonModal
                     onSubmit={handleExitSubmit}
                     onDismiss={() => setShowExitModal(false)}
+                />
+            )}
+
+            {showLogoutReasonModal && (
+                <LogoutReasonModal
+                    onSubmit={handleLogoutReasonSubmit}
+                    onDismiss={() => setShowLogoutReasonModal(false)}
+                />
+            )}
+
+            {showLoginFaceScanner && (
+                <FaceScannerModal
+                    title="Login Verification"
+                    onVerify={handleLoginFaceVerify}
+                    onDismiss={handleLoginCancel}
+                />
+            )}
+
+            {showLogoutFaceScanner && (
+                <FaceScannerModal
+                    title="Logout Verification"
+                    onVerify={() => finalizeLogout(logoutReason)}
+                    onDismiss={() => setShowLogoutFaceScanner(false)}
                 />
             )}
 
@@ -379,6 +443,15 @@ const StaffView = () => {
                                 <p className="text-gray-500 dark:text-blue-200 text-xs font-bold uppercase">Break Deduction</p>
                                 <p className="text-orange-600 dark:text-orange-300 font-black">{formatDuration(session.totalOutsideMinutes)}</p>
                             </div>
+                            {session.logoutReason && (
+                                <div className="col-span-2 pt-2 border-t border-gray-100 dark:border-white/5">
+                                    <p className="text-gray-500 dark:text-blue-200 text-xs font-bold uppercase">Logout Reason</p>
+                                    <p className="text-gray-900 dark:text-white font-black flex items-center gap-2">
+                                        {session.logoutReason === 'Official' ? <Briefcase size={14} className="text-blue-400" /> : <Coffee size={14} className="text-orange-400" />}
+                                        {session.logoutReason}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -418,17 +491,17 @@ const StaffView = () => {
                     <div className="flex justify-center gap-3">
                         {!session && (
                             <button
-                                onClick={handleLogin}
+                                onClick={handleLoginInitiate}
                                 disabled={actionLoading}
                                 className="w-64 flex items-center justify-center gap-2 bg-green-400 text-green-900 font-black py-3 rounded-xl hover:bg-green-300 transition-all active:scale-95 disabled:opacity-60 shadow-lg shadow-green-400/20 text-base"
                             >
-                                {actionLoading ? <div className="w-5 h-5 border-2 border-green-900 border-t-transparent rounded-full animate-spin"></div> : <LogIn size={20} />}
-                                {actionLoading ? 'Logging in...' : `Login (${mode === 'office' ? '🏢 Office' : '💻 Remote'})`}
+                                {actionLoading && !showLoginFaceScanner ? <div className="w-5 h-5 border-2 border-green-900 border-t-transparent rounded-full animate-spin"></div> : <LogIn size={20} />}
+                                {actionLoading && !showLoginFaceScanner ? 'Checking Location...' : `Login (${mode === 'office' ? '🏢 Office' : '💻 Remote'})`}
                             </button>
                         )}
                         {isLoggedIn && (
                             <button
-                                onClick={handleLogout}
+                                onClick={handleLogoutInitiate}
                                 disabled={actionLoading}
                                 className="w-64 flex items-center justify-center gap-2 bg-red-400 text-white font-black py-3 rounded-xl hover:bg-red-500 transition-all active:scale-95 disabled:opacity-60 shadow-lg text-base"
                             >
@@ -692,7 +765,7 @@ const AdminView = () => {
                         <table className="w-full text-left">
                             <thead className="bg-gray-50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
                                 <tr>
-                                    {['Date', 'Employee', 'Mode', 'Login', 'Logout', 'Status', 'Working Hrs'].map(h => (
+                                    {['Date', 'Employee', 'Login Type', 'Login', 'Logout', 'Status', 'Working Hrs'].map(h => (
                                         <th key={h} className="px-4 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                                     ))}
                                 </tr>
@@ -701,7 +774,7 @@ const AdminView = () => {
                                 {records.map((rec, idx) => (
                                     <React.Fragment key={rec._id || idx}>
                                         <tr
-                                            className="hover:bg-blue-50 dark:bg-blue-500/10/30 transition-colors cursor-pointer"
+                                            className="hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors cursor-pointer"
                                             onClick={() => setExpandedRow(expandedRow === idx ? null : idx)}
                                         >
                                             <td className="px-4 py-4 whitespace-nowrap">
@@ -711,21 +784,22 @@ const AdminView = () => {
                                             </td>
                                             <td className="px-4 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 dark:text-blue-400 flex items-center justify-center font-black text-sm">
+                                                    <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center font-black text-sm">
                                                         {rec.userId?.name?.charAt(0) || '?'}
                                                     </div>
                                                     <div>
                                                         <p className="font-bold text-gray-900 dark:text-slate-100 text-sm leading-none">{rec.userId?.name || 'Unknown'}</p>
-                                                        <p className="text-xs text-gray-400">{rec.userId?.role}</p>
+                                                        <p className="text-xs text-gray-400 dark:text-slate-500">{rec.userId?.role}</p>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-4 py-4">
-                                                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                                                    rec.mode === 'office' ? 'bg-blue-100 text-blue-700 dark:text-blue-400' : 'bg-purple-100 text-purple-700 dark:text-purple-400'
+                                                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold ${
+                                                    rec.mode === 'office' ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-100/50' : 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-100/50'
                                                 }`}>
-                                                    {rec.mode === 'office' ? '🏢 Office' : '💻 Remote'}
-                                                </span>
+                                                    {rec.mode === 'office' ? <Building2 size={12} /> : <MonitorSmartphone size={12} />}
+                                                    {rec.mode === 'office' ? 'Office' : 'Remote'}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-4 text-sm font-medium text-gray-700 dark:text-slate-300 whitespace-nowrap">{formatTime(rec.loginTime)}</td>
                                             <td className="px-4 py-4 text-sm font-medium text-gray-700 dark:text-slate-300 whitespace-nowrap">{formatTime(rec.logoutTime)}</td>
@@ -736,7 +810,7 @@ const AdminView = () => {
                                             </td>
                                             <td className="px-4 py-4 text-sm font-bold text-gray-900 dark:text-slate-100 whitespace-nowrap">
                                                 {rec.isActive ? (
-                                                    <span className="text-blue-600 flex items-center gap-1">
+                                                    <span className="text-blue-600 dark:text-blue-400 flex items-center gap-1">
                                                         <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
                                                         Active
                                                     </span>
@@ -746,21 +820,34 @@ const AdminView = () => {
                                         {/* Expanded movement logs */}
                                         {expandedRow === idx && rec.movements?.length > 0 && (
                                             <tr>
-                                                <td colSpan={8} className="bg-blue-50 dark:bg-blue-500/10/50 px-6 py-4">
-                                                    <p className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">Movement History</p>
-                                                    <div className="space-y-2">
+                                                <td colSpan={7} className="bg-blue-50/30 dark:bg-slate-900/30 px-6 py-4 shadow-inner">
+                                                    <div className="flex items-center justify-between mb-4">
+                                                        <p className="text-xs font-black text-gray-500 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                            <Activity size={12} /> Movement History
+                                                        </p>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                         {rec.movements.map((m, mi) => (
-                                                            <div key={mi} className="flex items-center gap-4 bg-white dark:bg-slate-800 rounded-xl p-3 border border-gray-100 dark:border-slate-700 text-sm">
-                                                                <span className={`px-2.5 py-1 rounded-lg font-bold text-xs ${
+                                                            <div key={mi} className="flex items-center gap-4 bg-white dark:bg-slate-800 rounded-2xl p-4 border border-gray-100 dark:border-slate-700/50 text-sm shadow-sm transition-transform hover:scale-[1.01]">
+                                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
                                                                     m.reason === 'Personal' ? 'bg-orange-100 text-orange-700' :
                                                                     m.reason === 'Official Work' ? 'bg-blue-100 text-blue-700 dark:text-blue-400' :
                                                                     'bg-purple-100 text-purple-700 dark:text-purple-400'
-                                                                }`}>{m.reason}</span>
-                                                                <span className="text-gray-600 dark:text-slate-400">
-                                                                    {formatTime(m.exitTime)} → {m.reEntryTime ? formatTime(m.reEntryTime) : 'Still out'}
-                                                                </span>
-                                                                <span className="font-bold text-gray-900 dark:text-slate-100">{formatDuration(m.durationMinutes)}</span>
-                                                                {m.deducted && <span className="text-red-500 font-bold text-xs bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-full">Deducted</span>}
+                                                                }`}>
+                                                                    {m.reason === 'Personal' ? <Coffee size={16} /> :
+                                                                     m.reason === 'Official Work' ? <Briefcase size={16} /> :
+                                                                     <UserCheck size={16} />}
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <p className="font-bold text-gray-900 dark:text-slate-100">{m.reason}</p>
+                                                                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                                                                        {formatTime(m.exitTime)} → {m.reEntryTime ? formatTime(m.reEntryTime) : 'Active Outside'}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <p className="font-black text-gray-900 dark:text-slate-100">{formatDuration(m.durationMinutes)}</p>
+                                                                    {m.deducted && <span className="text-[10px] font-black text-red-500 uppercase">Deducted</span>}
+                                                                </div>
                                                             </div>
                                                         ))}
                                                     </div>
