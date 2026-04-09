@@ -28,9 +28,34 @@ connectDB().then(async () => {
             dailyTarget: 10,
             officeLat: 12.9610,
             officeLng: 77.5127,
-            geofenceRadius: 100
+            geofenceRadius: 100,
+            adminIncentiveModel: 'percentage',
+            adminCompanyTarget: 150,
+            adminIncentivePerExtraSale: 50,
+            adminIncentivePerSeller: 100,
+            adminIncentivePercentage: 5
         });
         console.log('OfficeSettings initialized with dailyTarget: 10');
+    } else {
+        // Migration for existing DBs
+        let updated = false;
+        if (!settings.adminIncentiveModel) { settings.adminIncentiveModel = 'percentage'; updated = true; }
+        if (settings.adminCompanyTarget === undefined) { settings.adminCompanyTarget = 150; updated = true; }
+        if (settings.adminIncentivePerExtraSale === undefined) { settings.adminIncentivePerExtraSale = 50; updated = true; }
+        if (settings.adminIncentivePerSeller === undefined) { settings.adminIncentivePerSeller = 100; updated = true; }
+        if (settings.adminIncentivePercentage === undefined) { settings.adminIncentivePercentage = 5; updated = true; }
+        
+        if (settings.tierBronzeStart === undefined) { settings.tierBronzeStart = 11; updated = true; }
+        if (settings.tierBronzePayout === undefined) { settings.tierBronzePayout = 200; updated = true; }
+        if (settings.tierSilverStart === undefined) { settings.tierSilverStart = 16; updated = true; }
+        if (settings.tierSilverPayout === undefined) { settings.tierSilverPayout = 225; updated = true; }
+        if (settings.tierGoldStart === undefined) { settings.tierGoldStart = 21; updated = true; }
+        if (settings.tierGoldPayout === undefined) { settings.tierGoldPayout = 250; updated = true; }
+        
+        if (updated) {
+            await settings.save();
+            console.log('OfficeSettings updated with new defaults');
+        }
     }
 });
 

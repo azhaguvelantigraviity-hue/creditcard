@@ -269,7 +269,13 @@ const updateOfficeSettings = async (req, res) => {
         let settings = await OfficeSettings.findOne();
         if (!settings) settings = new OfficeSettings();
 
-        const { officeLat, officeLng, geofenceRadius, lateThreshold, halfDayThreshold, autoLogoutTime, dailyTarget } = req.body;
+        const { 
+            officeLat, officeLng, geofenceRadius, lateThreshold, halfDayThreshold, 
+            autoLogoutTime, dailyTarget, adminIncentiveModel, adminCompanyTarget,
+            adminIncentivePerExtraSale, adminIncentivePerSeller, adminIncentivePercentage,
+            tierBronzeStart, tierBronzePayout, tierSilverStart, tierSilverPayout, tierGoldStart, tierGoldPayout
+        } = req.body;
+        
         if (officeLat !== undefined) settings.officeLat = officeLat;
         if (officeLng !== undefined) settings.officeLng = officeLng;
         if (geofenceRadius !== undefined) settings.geofenceRadius = geofenceRadius;
@@ -277,6 +283,19 @@ const updateOfficeSettings = async (req, res) => {
         if (halfDayThreshold) settings.halfDayThreshold = halfDayThreshold;
         if (autoLogoutTime) settings.autoLogoutTime = autoLogoutTime;
         if (dailyTarget !== undefined) settings.dailyTarget = dailyTarget;
+        
+        if (adminIncentiveModel) settings.adminIncentiveModel = adminIncentiveModel;
+        if (adminCompanyTarget !== undefined) settings.adminCompanyTarget = adminCompanyTarget;
+        if (adminIncentivePerExtraSale !== undefined) settings.adminIncentivePerExtraSale = adminIncentivePerExtraSale;
+        if (adminIncentivePerSeller !== undefined) settings.adminIncentivePerSeller = adminIncentivePerSeller;
+        if (adminIncentivePercentage !== undefined) settings.adminIncentivePercentage = adminIncentivePercentage;
+
+        if (tierBronzeStart !== undefined) settings.tierBronzeStart = tierBronzeStart;
+        if (tierBronzePayout !== undefined) settings.tierBronzePayout = tierBronzePayout;
+        if (tierSilverStart !== undefined) settings.tierSilverStart = tierSilverStart;
+        if (tierSilverPayout !== undefined) settings.tierSilverPayout = tierSilverPayout;
+        if (tierGoldStart !== undefined) settings.tierGoldStart = tierGoldStart;
+        if (tierGoldPayout !== undefined) settings.tierGoldPayout = tierGoldPayout;
 
         await settings.save();
         res.json({ message: 'Settings updated', settings });

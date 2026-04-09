@@ -53,16 +53,47 @@ const updateSaleStatus = async (req, res) => {
             sale.status = req.body.status || sale.status;
             const updatedSale = await sale.save();
 
-            // Create incentive record for every approved sale (₹200 per card)
+            // Create incentive record for every approved sale dynamically
             if (updatedSale.status === 'Approved') {
+                const settings = await OfficeSettings.findOne();
+                const dailyTarget = settings?.dailyTarget || 10;
                 const incentivePerCard = 200;
+
+                const startOfDay = new Date(updatedSale.date);
+                startOfDay.setHours(0, 0, 0, 0);
+                const endOfDay = new Date(updatedSale.date);
+                endOfDay.setHours(23, 59, 59, 999);
+
+                const approvedCount = await Sale.countDocuments({
+                    sellerId: updatedSale.sellerId,
+                    status: 'Approved',
+                    date: { $gte: startOfDay, $lte: endOfDay }
+                });
+
+                // Apply advanced marginal tier logic based on OfficeSettings configurations
+                let amount = 0;
+                
+                const bronzeStart = settings?.tierBronzeStart || 11;
+                const silverStart = settings?.tierSilverStart || 16;
+                const goldStart = settings?.tierGoldStart || 21;
+
+                if (approvedCount >= goldStart) {
+                    amount = settings?.tierGoldPayout || 250;
+                } else if (approvedCount >= silverStart) {
+                    amount = settings?.tierSilverPayout || 225;
+                } else if (approvedCount >= bronzeStart) {
+                    amount = settings?.tierBronzePayout || 200;
+                }
+
+                // Auto-credit if amount is 0 to avoid cluttering pending payouts
+                const incentiveStatus = amount === 0 ? 'Credited' : 'Pending';
 
                 await Incentive.findOneAndUpdate(
                     { saleId: updatedSale._id },
                     { 
                         sellerId: updatedSale.sellerId,
-                        amount: incentivePerCard, 
-                        status: 'Credited', 
+                        amount: amount, 
+                        status: incentiveStatus, 
                         payoutDate: new Date() 
                     },
                     { upsert: true, new: true }

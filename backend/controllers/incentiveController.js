@@ -35,13 +35,28 @@ const getIncentiveStats = async (req, res) => {
         const dd = String(todayObj.getDate()).padStart(2, '0');
         const todayStr = `${yyyy}-${mm}-${dd}`;
 
+        const bronzeStart = settings?.tierBronzeStart || 11;
+        const silverStart = settings?.tierSilverStart || 16;
+        const goldStart = settings?.tierGoldStart || 21;
+        
+        const bronzePayout = settings?.tierBronzePayout || 200;
+        const silverPayout = settings?.tierSilverPayout || 225;
+        const goldPayout = settings?.tierGoldPayout || 250;
+
         salesByDay.forEach(day => {
             totalCount += day.count;
             if (day._id === todayStr) {
                 todayCount = day.count;
             }
-            if (day.count > dailyTarget) {
-                totalEarnings += (day.count - dailyTarget) * incentivePerCard;
+            
+            for (let i = 1; i <= day.count; i++) {
+                if (i >= goldStart) {
+                    totalEarnings += goldPayout;
+                } else if (i >= silverStart) {
+                    totalEarnings += silverPayout;
+                } else if (i >= bronzeStart) {
+                    totalEarnings += bronzePayout;
+                }
             }
         });
 
@@ -58,13 +73,35 @@ const getIncentiveStats = async (req, res) => {
 
         const credited = creditedData.length > 0 ? creditedData[0].credited : 0;
         const pending = totalEarnings - credited;
+        
+        let todayEarnings = 0;
+        const todayExtra = todayCount > dailyTarget ? todayCount - dailyTarget : 0;
+        
+        for (let i = 1; i <= todayCount; i++) {
+            if (i >= goldStart) {
+                todayEarnings += goldPayout;
+            } else if (i >= silverStart) {
+                todayEarnings += silverPayout;
+            } else if (i >= bronzeStart) {
+                todayEarnings += bronzePayout;
+            }
+        }
+        
+        let currentTier = 'Unranked';
+        if (todayCount >= goldStart) currentTier = 'Gold';
+        else if (todayCount >= silverStart) currentTier = 'Silver';
+        else if (todayCount >= bronzeStart) currentTier = 'Bronze';
 
         res.json({
             totalEarnings,
             credited,
             pending: Math.max(pending, 0),
             count: totalCount,
-            todayCount
+            todayCount,
+            dailyTarget,
+            todayExtra,
+            todayEarnings,
+            currentTier
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -76,31 +113,77 @@ const getIncentiveStats = async (req, res) => {
 // @access  Private
 const getIncentiveLedger = async (req, res) => {
     try {
+        const settings = await OfficeSettings.findOne();
+        const dailyTarget = settings?.dailyTarget || 10;
         const incentivePerCard = 200;
 
         // Get all approved sales for this seller
         const sales = await Sale.find({ sellerId: req.user._id, status: 'Approved' })
-            .populate('leadId', 'name phoneNumber')
-            .sort({ date: -1 });
+            .populate('leadId', 'name phoneNumber');
 
         // Get all incentive records to check credited status
         const incentiveRecords = await Incentive.find({ sellerId: req.user._id });
         const incentiveMap = {};
         incentiveRecords.forEach(inc => {
             if (inc.saleId) {
-                incentiveMap[inc.saleId.toString()] = inc.status;
+                incentiveMap[inc.saleId.toString()] = { status: inc.status, amount: inc.amount };
             }
         });
 
-        // Map each sale to a ledger entry
-        const formattedLedger = sales.map(sale => ({
-            id: sale._id,
-            name: sale.leadId?.name || 'Unknown Client',
-            product: sale.cardType || 'SBI Card',
-            date: new Date(sale.date).toISOString().split('T')[0],
-            amount: `₹${incentivePerCard.toLocaleString()}`,
-            status: incentiveMap[sale._id.toString()] || 'Pending'
-        }));
+        // Sort oldest first to calculate daily targets accurately
+        const sortedSales = [...sales].sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        const formattedLedger = [];
+        const dailyCountMap = {};
+
+        sortedSales.forEach(sale => {
+            // Group by local date string
+            const localDate = new Date(sale.date).toLocaleDateString("en-CA", {timeZone: "Asia/Kolkata"});
+            
+            if (!dailyCountMap[localDate]) {
+                dailyCountMap[localDate] = 0;
+            }
+            dailyCountMap[localDate]++;
+
+            let amount = 0;
+            const incRecord = incentiveMap[sale._id.toString()];
+            
+            // Prefer actual DB amount if available (covers manual overrides or correct saves)
+            if (incRecord !== undefined && incRecord.amount !== undefined) {
+                amount = incRecord.amount;
+            } else {
+                // Dynamic fallback calculation for legacy records with Advanced Tiers
+                const count = dailyCountMap[localDate];
+                
+                const bronzeStart = settings?.tierBronzeStart || 11;
+                const silverStart = settings?.tierSilverStart || 16;
+                const goldStart = settings?.tierGoldStart || 21;
+
+                if (count >= goldStart) {
+                    amount = settings?.tierGoldPayout || 250;
+                } else if (count >= silverStart) {
+                    amount = settings?.tierSilverPayout || 225;
+                } else if (count >= bronzeStart) {
+                    amount = settings?.tierBronzePayout || 200;
+                } else {
+                    amount = 0;
+                }
+            }
+
+            const status = incRecord?.status || (amount === 0 ? 'Credited' : 'Pending');
+
+            formattedLedger.push({
+                id: sale._id,
+                name: sale.leadId?.name || 'Unknown Client',
+                product: sale.cardType || 'SBI Card',
+                date: localDate,
+                amount: `₹${amount.toLocaleString()}`,
+                status: status
+            });
+        });
+
+        // Reverse to show newest sales at the top of the UI
+        formattedLedger.reverse();
 
         res.json(formattedLedger);
     } catch (error) {
@@ -292,13 +375,33 @@ const getDashboardIncentives = async (req, res) => {
             const pending = pendingMap[sellerId] || { pendingAmount: 0, pendingCount: 0 };
             const todayCount = dailyMap[sellerId] || 0;
 
-            // Calculate total incentive based on daily threshold
+            // Calculate total incentive based on daily threshold using Advanced Tiers
             let totalIncentive = 0;
+            
+            const bronzeStart = settings?.tierBronzeStart || 11;
+            const silverStart = settings?.tierSilverStart || 16;
+            const goldStart = settings?.tierGoldStart || 21;
+            
+            const bronzePayout = settings?.tierBronzePayout || 200;
+            const silverPayout = settings?.tierSilverPayout || 225;
+            const goldPayout = settings?.tierGoldPayout || 250;
+
             seller.dailyBreakdown.forEach(day => {
-                if (day.count > dailyTargetValue) {
-                    totalIncentive += (day.count - dailyTargetValue) * incentivePerCard;
+                for (let i = 1; i <= day.count; i++) {
+                    if (i >= goldStart) {
+                        totalIncentive += goldPayout;
+                    } else if (i >= silverStart) {
+                        totalIncentive += silverPayout;
+                    } else if (i >= bronzeStart) {
+                        totalIncentive += bronzePayout;
+                    }
                 }
             });
+
+            let currentTier = 'Unranked';
+            if (todayCount >= goldStart) currentTier = 'Gold';
+            else if (todayCount >= silverStart) currentTier = 'Silver';
+            else if (todayCount >= bronzeStart) currentTier = 'Bronze';
 
             return {
                 _id: seller._id,
@@ -309,11 +412,83 @@ const getDashboardIncentives = async (req, res) => {
                 pendingIncentive: pending.pendingAmount,
                 pendingCount: pending.pendingCount,
                 dailyCount: todayCount,
-                dailyTarget: dailyTargetValue
+                dailyTarget: dailyTargetValue,
+                currentTier: currentTier
             };
         });
 
         res.json(result);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get admin's personal incentive payout based on dynamic model
+// @route   GET /api/incentives/admin-stats
+// @access  Private (Admin)
+const getAdminStats = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+        const settings = await OfficeSettings.findOne();
+        if (!settings) return res.status(404).json({ message: 'Settings not found' });
+
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Fetch all approved sales today
+        const salesData = await Sale.aggregate([
+            { $match: { status: 'Approved', date: { $gte: startOfDay, $lte: endOfDay } } },
+            { $group: { _id: '$sellerId', count: { $sum: 1 } } }
+        ]);
+
+        let adminEarnings = 0;
+        let adminExtraSales = 0;
+        let successfulSellers = 0;
+        let totalCompanySales = 0;
+        let totalSellerIncentives = 0;
+
+        const dailyTargetValue = settings.dailyTarget || 10;
+        const incentivePerCard = 200;
+
+        salesData.forEach(seller => {
+            totalCompanySales += seller.count;
+            if (seller.count > dailyTargetValue) {
+                successfulSellers++;
+                totalSellerIncentives += (seller.count - dailyTargetValue) * incentivePerCard;
+            }
+        });
+
+        if (settings.adminIncentiveModel === 'total_sales') {
+            const target = settings.adminCompanyTarget || 150;
+            if (totalCompanySales > target) {
+                adminExtraSales = totalCompanySales - target;
+                adminEarnings = adminExtraSales * (settings.adminIncentivePerExtraSale || 50);
+            }
+        } else if (settings.adminIncentiveModel === 'per_seller') {
+            adminEarnings = successfulSellers * (settings.adminIncentivePerSeller || 100);
+        } else if (settings.adminIncentiveModel === 'percentage') {
+            const percentage = settings.adminIncentivePercentage || 5;
+            adminEarnings = (totalSellerIncentives * percentage) / 100;
+        }
+
+        res.json({
+            model: settings.adminIncentiveModel,
+            adminEarnings,
+            totalCompanySales,
+            successfulSellers,
+            totalSellerIncentives,
+            adminExtraSales,
+            details: {
+                target: settings.adminIncentiveModel === 'total_sales' ? settings.adminCompanyTarget : 0,
+                multiplier: settings.adminIncentiveModel === 'total_sales' ? settings.adminIncentivePerExtraSale :
+                            settings.adminIncentiveModel === 'per_seller' ? settings.adminIncentivePerSeller :
+                            settings.adminIncentivePercentage
+            }
+        });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -324,5 +499,6 @@ module.exports = {
     getIncentiveLedger,
     getMonthlyIncentiveStats,
     getAdminIncentiveSummary,
-    getDashboardIncentives
+    getDashboardIncentives,
+    getAdminStats
 };

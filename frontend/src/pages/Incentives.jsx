@@ -185,7 +185,18 @@ const Incentives = () => {
                                                     {item.sellerName?.charAt(0) || 'S'}
                                                 </div>
                                                 <div>
-                                                    <span className="font-bold text-lg text-gray-900 dark:text-slate-100 tracking-tight block">{item.sellerName}</span>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-lg text-gray-900 dark:text-slate-100 tracking-tight block">{item.sellerName}</span>
+                                                        {item.currentTier && item.currentTier !== 'Unranked' && (
+                                                            <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded shadow-sm border ${
+                                                                item.currentTier === 'Gold' ? 'bg-amber-100 text-yellow-800 border-yellow-300' :
+                                                                item.currentTier === 'Silver' ? 'bg-slate-200 text-slate-800 border-slate-300' :
+                                                                'bg-[#e6b17e]/30 text-[#8c521b] border-[#cd7f32]/50'
+                                                            }`}>
+                                                                {item.currentTier === 'Gold' ? '🥇' : item.currentTier === 'Silver' ? '🥈' : '🥉'} {item.currentTier}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mt-0.5">Sales Executive</span>
                                                 </div>
                                             </div>

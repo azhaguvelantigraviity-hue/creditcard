@@ -87,6 +87,8 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [incentives, setIncentives] = useState([]);
     const [incentivesLoading, setIncentivesLoading] = useState(true);
+    const [sellerStats, setSellerStats] = useState(null);
+    const [adminStats, setAdminStats] = useState(null);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -111,9 +113,31 @@ const Dashboard = () => {
             }
         };
 
+        const fetchSellerStats = async () => {
+            if (isAdmin) return;
+            try {
+                const { data } = await api.get('/incentives/stats');
+                setSellerStats(data);
+            } catch (error) {
+                console.error('Error fetching seller personal stats:', error);
+            }
+        };
+
+        const fetchAdminStats = async () => {
+            if (!isAdmin) return;
+            try {
+                const { data } = await api.get('/incentives/admin-stats');
+                setAdminStats(data);
+            } catch (error) {
+                console.error('Error fetching admin stats:', error);
+            }
+        };
+
         fetchStats();
         fetchIncentives();
-    }, []);
+        fetchSellerStats();
+        fetchAdminStats();
+    }, [isAdmin]);
 
     if (loading) return (
         <div className="flex items-center justify-center h-full">
@@ -133,6 +157,121 @@ const Dashboard = () => {
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Welcome Back, {user?.name}!</h1>
                 <p className="text-gray-500 dark:text-slate-400">Here's what's happening with your sales today.</p>
             </div>
+
+            {/* Seller Specific: Today's Target Overview */}
+            {!isAdmin && sellerStats && (
+                <div className="bg-gradient-to-br from-sbi-blue to-[#1a2553] p-6 rounded-2xl shadow-md text-white mb-6 relative overflow-hidden">
+                    <div className="absolute -right-10 -top-10 text-white/5">
+                        <Target size={150} />
+                    </div>
+                    <div className="relative z-10 flex flex-col md:flex-row gap-6 items-center justify-between">
+                        <div className="flex-1">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold flex items-center gap-2">
+                                    <Target className="text-amber-400" /> Today's Target Overview
+                                </h2>
+                                {sellerStats.currentTier && sellerStats.currentTier !== 'Unranked' && (
+                                    <div className={`px-4 py-1.5 rounded-full text-sm font-black tracking-widest shadow-lg ${
+                                        sellerStats.currentTier === 'Gold' ? 'bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 text-yellow-900 border border-yellow-300' :
+                                        sellerStats.currentTier === 'Silver' ? 'bg-gradient-to-r from-slate-200 via-slate-300 to-slate-400 text-slate-800 border border-slate-300' :
+                                        'bg-gradient-to-r from-[#e6b17e] via-[#cd7f32] to-[#8c521b] text-white border border-[#cd7f32]'
+                                    }`}>
+                                        {sellerStats.currentTier === 'Gold' ? '🥇' : sellerStats.currentTier === 'Silver' ? '🥈' : '🥉'} {sellerStats.currentTier.toUpperCase()} TIER
+                                    </div>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                <div className="bg-white/10 rounded-xl p-3 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-blue-200 text-xs uppercase tracking-wider font-semibold">Today Sales</p>
+                                    <p className="text-2xl font-black">{sellerStats.todayCount} Cards</p>
+                                </div>
+                                <div className="bg-white/10 rounded-xl p-3 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-blue-200 text-xs uppercase tracking-wider font-semibold">Target</p>
+                                    <p className="text-2xl font-black">{sellerStats.dailyTarget} Cards</p>
+                                </div>
+                                <div className="bg-white/10 rounded-xl p-3 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-blue-200 text-xs uppercase tracking-wider font-semibold">Extra Sales</p>
+                                    <p className="text-2xl font-black text-amber-300">{sellerStats.todayExtra} Cards</p>
+                                </div>
+                                <div className="bg-white/10 rounded-xl p-3 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-blue-200 text-xs uppercase tracking-wider font-semibold">Incentive Earned</p>
+                                    <p className="text-2xl font-black text-green-300">₹{sellerStats.todayEarnings}</p>
+                                </div>
+                            </div>
+                            
+                            {/* Progress bar */}
+                            <div className="mt-2">
+                                <div className="flex justify-between text-sm mb-1 font-bold text-blue-100">
+                                    <span>Progress</span>
+                                    <span>{sellerStats.todayCount}/{sellerStats.dailyTarget} completed</span>
+                                </div>
+                                <div className="h-2 w-full bg-blue-900/50 rounded-full overflow-hidden">
+                                    <div 
+                                        className="h-full bg-gradient-to-r from-amber-400 to-green-400 rounded-full" 
+                                        style={{ width: `${Math.min((sellerStats.todayCount / sellerStats.dailyTarget) * 100, 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Celebratory Message block */}
+                        {sellerStats.todayEarnings > 0 && (
+                            <div className="bg-green-500/20 border border-green-400/30 p-4 rounded-xl text-center md:w-64 animate-pulse">
+                                <Award size={32} className="text-green-300 mx-auto mb-2" />
+                                <p className="font-bold text-lg text-green-100">You earned ₹{sellerStats.todayEarnings} today 🎉</p>
+                                <p className="text-xs text-green-200/80 mt-1">Keep pushing for more extra sales!</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Admin Specific: Admin Earnings Overview */}
+            {isAdmin && adminStats && (
+                <div className="bg-gradient-to-br from-purple-900 to-purple-950 p-6 rounded-2xl shadow-md text-white mb-6 relative overflow-hidden">
+                    <div className="absolute -right-5 -bottom-5 text-white/5">
+                        <IndianRupee size={150} />
+                    </div>
+                    <div className="relative z-10 flex flex-col md:flex-row gap-6 items-center justify-between">
+                        <div className="flex-1">
+                            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                <Award className="text-amber-400" /> Admin Earnings Overview
+                            </h2>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                <div className="bg-white/10 rounded-xl p-3 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-purple-200 text-xs uppercase tracking-wider font-semibold">Active Model</p>
+                                    <p className="text-xl font-black capitalize">{adminStats.model.replace('_', ' ')}</p>
+                                </div>
+                                <div className="bg-white/10 rounded-xl p-3 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-purple-200 text-xs uppercase tracking-wider font-semibold">
+                                        {adminStats.model === 'total_sales' ? 'Company Targets' : 
+                                         adminStats.model === 'per_seller' ? 'Successful Sellers' : 'Total Payouts'}
+                                    </p>
+                                    <p className="text-2xl font-black">{adminStats.details.target}</p>
+                                </div>
+                                <div className="bg-white/10 rounded-xl p-3 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-purple-200 text-xs uppercase tracking-wider font-semibold">Multiplier</p>
+                                    <p className="text-2xl font-black text-amber-300">
+                                        {adminStats.model === 'percentage' ? '' : '₹'}{adminStats.details.multiplier}
+                                    </p>
+                                </div>
+                                <div className="bg-purple-600/30 rounded-xl p-3 border border-purple-400/30 backdrop-blur-sm shadow-inner">
+                                    <p className="text-purple-100 text-xs uppercase tracking-wider font-semibold">Today's Earnings</p>
+                                    <p className="text-2xl font-black text-green-300 tracking-tight">₹{adminStats.adminEarnings.toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {adminStats.adminEarnings > 0 && (
+                            <div className="bg-green-500/20 border border-green-400/30 p-4 rounded-xl text-center md:w-64 animate-pulse">
+                                <Wallet size={32} className="text-green-300 mx-auto mb-2" />
+                                <p className="font-bold text-lg text-green-100">You earned ₹{adminStats.adminEarnings.toLocaleString()} today 🎉</p>
+                                <p className="text-xs text-green-200/80 mt-1">From team performance</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

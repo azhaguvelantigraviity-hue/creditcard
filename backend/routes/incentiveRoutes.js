@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../middleware/authMiddleware');
+const { authorize } = require('../middleware/roleMiddleware');
 const { 
     getIncentiveStats, 
     getIncentiveLedger, 
     getMonthlyIncentiveStats,
     getAdminIncentiveSummary,
-    getDashboardIncentives 
+    getDashboardIncentives,
+    getAdminStats
 } = require('../controllers/incentiveController');
-const { protect } = require('../middleware/authMiddleware');
-const { authorize } = require('../middleware/roleMiddleware');
 
 // @desc    Get aggregate stats
 // @route   GET /api/incentives/stats
@@ -29,5 +30,9 @@ router.get('/dashboard-summary', protect, getDashboardIncentives);
 // @desc    Get aggregate incentive summary for all sellers (Admin Only)
 // @route   GET /api/incentives/admin/summary
 router.get('/admin/summary', protect, authorize('admin'), getAdminIncentiveSummary);
+
+// @desc    Get admin's personal incentive payout
+// @route   GET /api/incentives/admin-stats
+router.get('/admin-stats', protect, authorize('admin'), getAdminStats);
 
 module.exports = router;
