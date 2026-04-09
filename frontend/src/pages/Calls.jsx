@@ -55,6 +55,7 @@ const Calls = () => {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [leadSearchTerm, setLeadSearchTerm] = useState('');
     const [filterOutcome, setFilterOutcome] = useState('All');
     const [formData, setFormData] = useState({
         leadId: '',
@@ -107,6 +108,7 @@ const Calls = () => {
         try {
             await api.post('/calls', formData);
             setIsModalOpen(false);
+            setLeadSearchTerm('');
             fetchCalls();
             fetchStats();
             setFormData({ leadId: '', outcome: 'Interested', notes: '', duration: '' });
@@ -253,50 +255,131 @@ const Calls = () => {
             </div>
 
             {/* Modal for logging new call */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Log New Call">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Select Lead</label>
-                        <select 
-                            name="leadId" 
-                            required 
-                            value={formData.leadId} 
-                            onChange={handleInputChange} 
-                            className="w-full p-3 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue bg-white dark:bg-slate-800"
-                        >
-                            <option value="">Search Lead...</option>
-                            {leads.map(lead => <option key={lead._id} value={lead._id}>{lead.name} ({lead.phone})</option>)}
-                        </select>
+            <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setLeadSearchTerm(''); }} title="Log New Call">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="relative">
+                        <label className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">Select Lead</label>
+                        <div className="relative group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-sbi-blue transition-colors" size={18} />
+                            <input 
+                                type="text"
+                                placeholder="Search Lead by name or phone..."
+                                className={`w-full pl-11 pr-4 py-3.5 bg-gray-50 dark:bg-slate-900/50 border ${!formData.leadId && formData.notes ? 'border-red-300' : 'border-gray-200 dark:border-slate-700'} rounded-2xl outline-none focus:ring-2 focus:ring-sbi-blue/20 focus:border-sbi-blue transition-all font-medium`}
+                                value={leadSearchTerm}
+                                onChange={(e) => {
+                                    setLeadSearchTerm(e.target.value);
+                                    if (formData.leadId) setFormData({ ...formData, leadId: '' }); // Reset selection if typing
+                                }}
+                            />
+                            {formData.leadId && (
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-green-500 text-white p-1 rounded-full">
+                                    <CheckCircle2 size={14} />
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Dropdown Results */}
+                        {leadSearchTerm.length > 0 && !formData.leadId && (
+                            <div className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-2xl shadow-2xl max-h-60 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 duration-200">
+                                {leads.filter(l => 
+                                    (l.name && l.name.toLowerCase().includes(leadSearchTerm.toLowerCase())) || 
+                                    (l.phoneNumber && l.phoneNumber.includes(leadSearchTerm))
+                                ).map(lead => (
+                                    <button
+                                        key={lead._id}
+                                        type="button"
+                                        onClick={() => {
+                                            setFormData({ ...formData, leadId: lead._id });
+                                            setLeadSearchTerm(lead.name);
+                                        }}
+                                        className="w-full text-left px-5 py-4 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors border-b border-gray-50 dark:border-slate-700/50 last:border-0"
+                                    >
+                                        <p className="font-bold text-gray-900 dark:text-slate-100">{lead.name}</p>
+                                        <p className="text-xs text-gray-500 dark:text-slate-400">{lead.phoneNumber}</p>
+                                    </button>
+                                ))}
+                                {leads.filter(l => 
+                                    (l.name && l.name.toLowerCase().includes(leadSearchTerm.toLowerCase())) || 
+                                    (l.phoneNumber && l.phoneNumber.includes(leadSearchTerm))
+                                ).length === 0 && (
+                                    <div className="p-8 text-center text-gray-400 font-medium">
+                                        No leads found
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {!formData.leadId && formData.notes && (
+                            <p className="text-xs text-red-500 font-bold mt-2 flex items-center gap-1">
+                                <XCircle size={12} />
+                                Please select a lead from the list
+                            </p>
+                        )}
                     </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Outcome</label>
-                        <select 
-                            name="outcome" 
-                            value={formData.outcome} 
-                            onChange={handleInputChange} 
-                            className="w-full p-3 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue bg-white dark:bg-slate-800"
-                        >
-                            <option value="Interested">Interested</option>
-                            <option value="Follow Up">Follow Up</option>
-                            <option value="Not Interested">Not Interested</option>
-                            <option value="No Answer">No Answer</option>
-                            <option value="Busy">Busy</option>
-                            <option value="Call Back">Call Back</option>
-                        </select>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">Outcome</label>
+                            <div className="relative">
+                                <select 
+                                    name="outcome" 
+                                    value={formData.outcome} 
+                                    onChange={handleInputChange} 
+                                    className="w-full p-4 bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-sbi-blue/20 focus:border-sbi-blue transition-all font-medium appearance-none"
+                                >
+                                    <option value="Interested">Interested</option>
+                                    <option value="Follow Up">Follow Up</option>
+                                    <option value="Not Interested">Not Interested</option>
+                                    <option value="No Answer">No Answer</option>
+                                    <option value="Busy">Busy</option>
+                                    <option value="Call Back">Call Back</option>
+                                </select>
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                    <ChevronRight className="rotate-90" size={18} />
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">Duration</label>
+                            <div className="relative">
+                                <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                <input 
+                                    type="text"
+                                    name="duration"
+                                    placeholder="e.g. 5m 30s"
+                                    className="w-full pl-11 pr-4 py-4 bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-sbi-blue/20 focus:border-sbi-blue transition-all font-medium"
+                                    value={formData.duration}
+                                    onChange={handleInputChange}
+                                />
+                            </div>
+                        </div>
                     </div>
+
                     <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Call Notes</label>
+                        <label className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">Call Notes</label>
                         <textarea 
                             name="notes" 
+                            required
                             value={formData.notes} 
                             onChange={handleInputChange} 
-                            className="w-full p-3 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue h-24" 
-                            placeholder="Summary of the conversation..." 
+                            className="w-full p-4 bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-sbi-blue/20 focus:border-sbi-blue h-32 transition-all font-medium placeholder:text-gray-400" 
+                            placeholder="Briefly describe the conversation outcome..." 
                         />
                     </div>
-                    <button type="submit" className="w-full bg-sbi-blue text-white py-4 rounded-xl font-bold text-lg hover:bg-sbi-hover transition-all active:scale-95 shadow-lg mt-4">
-                        Save Call Log
-                    </button>
+
+                    <div className="pt-2">
+                        <button 
+                            type="submit" 
+                            disabled={!formData.leadId}
+                            className={`w-full py-4.5 rounded-2xl font-bold text-lg transition-all shadow-xl flex items-center justify-center gap-2 ${
+                                formData.leadId 
+                                ? 'bg-sbi-blue text-white hover:bg-sbi-hover shadow-blue-500/20 active:scale-[0.98]' 
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            }`}
+                        >
+                            <PhoneOutgoing size={20} />
+                            <span>Save Call Log</span>
+                        </button>
+                    </div>
                 </form>
             </Modal>
         </div>

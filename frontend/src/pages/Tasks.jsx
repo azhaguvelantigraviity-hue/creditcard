@@ -56,6 +56,7 @@ const Tasks = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [users, setUsers] = useState([]); // For assignment dropdown
     const [openDropdownId, setOpenDropdownId] = useState(null); // For three-dot menu
+    const [todayCount, setTodayCount] = useState(0); // Today's cards count
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editSelectedTask, setEditSelectedTask] = useState(null);
     const [formData, setFormData] = useState({
@@ -71,8 +72,19 @@ const Tasks = () => {
         fetchTasks();
         if (user?.role === 'admin') {
             fetchUsers();
+        } else {
+            fetchTodayStats();
         }
     }, [user]);
+
+    const fetchTodayStats = async () => {
+        try {
+            const { data } = await api.get('/incentives/stats');
+            setTodayCount(data.todayCount || 0);
+        } catch (error) {
+            console.error('Error fetching today stats:', error);
+        }
+    };
 
     const fetchTasks = async () => {
         try {
@@ -196,9 +208,9 @@ const Tasks = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Task Management</h1>
-                    <p className="text-gray-500 dark:text-slate-400">Track and assign daily activities to staff</p>
+                    <p className="text-gray-500 dark:text-slate-400">Track staff activities. Incentives calculated for sales above daily 10-card target.</p>
                 </div>
-                {user?.role === 'admin' && (
+                {user?.role === 'admin' ? (
                     <button 
                         onClick={() => setIsModalOpen(true)}
                         className="bg-sbi-blue hover:bg-sbi-hover text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
@@ -206,6 +218,11 @@ const Tasks = () => {
                         <Plus size={20} />
                         <span>Assign New Task</span>
                     </button>
+                ) : (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 rounded-xl font-bold border border-green-200 dark:border-green-500/20 shadow-sm">
+                        <Target size={18} />
+                        <span>Today's Sales: {todayCount} Cards</span>
+                    </div>
                 )}
             </div>
 

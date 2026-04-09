@@ -28,12 +28,52 @@ const createLead = async (req, res) => {
 // @access  Private
 const getLeads = async (req, res) => {
     try {
-        let leads;
-        if (req.user.role === 'admin') {
-            leads = await Lead.find({}).populate('assignedTo', 'name email');
-        } else {
-            leads = await Lead.find({ assignedTo: req.user._id });
-        }
+        const matchQuery = req.user.role === 'admin' ? {} : { assignedTo: req.user._id };
+        
+        const leads = await Lead.aggregate([
+            { $match: matchQuery },
+            {
+                $lookup: {
+                    from: 'calllogs',
+                    localField: '_id',
+                    foreignField: 'leadId',
+                    as: 'calls'
+                }
+            },
+            {
+                $addFields: {
+                    lastCall: { $arrayElemAt: [{ $slice: ['$calls', -1] }, 0] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'lastCall.sellerId',
+                    foreignField: '_id',
+                    as: 'lastCallSeller'
+                }
+            },
+            {
+                $addFields: {
+                    'lastCall.sellerName': { $arrayElemAt: ['$lastCallSeller.name', 0] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'assignedTo',
+                    foreignField: '_id',
+                    as: 'assignedToUser'
+                }
+            },
+            {
+                $addFields: {
+                    assignedTo: { $arrayElemAt: ['$assignedToUser', 0] }
+                }
+            },
+            { $project: { calls: 0, lastCallSeller: 0, assignedToUser: 0 } }
+        ]);
+
         res.json(leads);
     } catch (error) {
         res.status(500).json({ message: error.message });

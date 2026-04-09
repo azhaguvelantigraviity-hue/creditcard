@@ -19,7 +19,20 @@ const permissionRoutes = require('./routes/permissionRoutes');
 dotenv.config();
 
 // Connect to Database
-connectDB();
+connectDB().then(async () => {
+    // Initialize OfficeSettings if not exists
+    const OfficeSettings = require('./models/OfficeSettings');
+    const settings = await OfficeSettings.findOne();
+    if (!settings) {
+        await OfficeSettings.create({
+            dailyTarget: 10,
+            officeLat: 12.9610,
+            officeLng: 77.5127,
+            geofenceRadius: 100
+        });
+        console.log('OfficeSettings initialized with dailyTarget: 10');
+    }
+});
 
 const app = express();
 

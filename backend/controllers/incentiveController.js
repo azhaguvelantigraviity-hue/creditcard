@@ -9,24 +9,43 @@ const mongoose = require('mongoose');
 // @access  Private
 const getIncentiveStats = async (req, res) => {
     try {
+        const settings = await OfficeSettings.findOne();
+        const dailyTarget = settings?.dailyTarget || 10;
         const incentivePerCard = 200;
         const sellerId = new mongoose.Types.ObjectId(req.user._id);
 
-        // Count approved sales for this seller
-        const salesData = await Sale.aggregate([
+        // Group sales by day and count approved ones
+        const salesByDay = await Sale.aggregate([
             { $match: { sellerId, status: 'Approved' } },
             {
                 $group: {
-                    _id: null,
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "Asia/Kolkata" } },
                     count: { $sum: 1 }
                 }
             }
         ]);
 
-        const count = salesData.length > 0 ? salesData[0].count : 0;
-        const totalEarnings = count * incentivePerCard;
+        let totalEarnings = 0;
+        let totalCount = 0;
+        let todayCount = 0;
+        const todayDate = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
+        const todayObj = new Date(todayDate);
+        const yyyy = todayObj.getFullYear();
+        const mm = String(todayObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(todayObj.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
 
-        // Get credited incentives from Incentive model
+        salesByDay.forEach(day => {
+            totalCount += day.count;
+            if (day._id === todayStr) {
+                todayCount = day.count;
+            }
+            if (day.count > dailyTarget) {
+                totalEarnings += (day.count - dailyTarget) * incentivePerCard;
+            }
+        });
+
+        // Get credited incentives from Incentive model (direct records)
         const creditedData = await Incentive.aggregate([
             { $match: { sellerId, status: 'Credited' } },
             {
@@ -44,7 +63,8 @@ const getIncentiveStats = async (req, res) => {
             totalEarnings,
             credited,
             pending: Math.max(pending, 0),
-            count
+            count: totalCount,
+            todayCount
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -93,25 +113,39 @@ const getIncentiveLedger = async (req, res) => {
 // @access  Private
 const getMonthlyIncentiveStats = async (req, res) => {
     try {
+        const settings = await OfficeSettings.findOne();
+        const dailyTarget = settings?.dailyTarget || 10;
         const incentivePerCard = 200;
+        const sellerId = new mongoose.Types.ObjectId(req.user._id);
 
-        const monthly = await Sale.aggregate([
-            { $match: { sellerId: new mongoose.Types.ObjectId(req.user._id), status: 'Approved' } },
+        // This is more complex because we need to group by day first, then by month
+        const dailyTotals = await Sale.aggregate([
+            { $match: { sellerId, status: 'Approved' } },
             {
                 $group: {
-                    _id: { $month: "$date" },
+                    _id: { 
+                        date: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "Asia/Kolkata" } },
+                        month: { $month: { date: "$date", timezone: "Asia/Kolkata" } }
+                    },
                     count: { $sum: 1 }
                 }
-            },
-            { $sort: { "_id": 1 } }
+            }
         ]);
 
-        // Map month numbers to names
+        const monthlyMap = {};
+        dailyTotals.forEach(day => {
+            const m = day._id.month;
+            if (!monthlyMap[m]) monthlyMap[m] = 0;
+            if (day.count > dailyTarget) {
+                monthlyMap[m] += (day.count - dailyTarget) * incentivePerCard;
+            }
+        });
+
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const formattedMonthly = monthly.map(item => ({
-            name: monthNames[item._id - 1],
-            amount: item.count * incentivePerCard
-        }));
+        const formattedMonthly = Object.keys(monthlyMap).map(m => ({
+            name: monthNames[parseInt(m) - 1],
+            amount: monthlyMap[m]
+        })).sort((a,b) => monthNames.indexOf(a.name) - monthNames.indexOf(b.name));
 
         res.json(formattedMonthly);
     } catch (error) {
@@ -166,23 +200,40 @@ const getAdminIncentiveSummary = async (req, res) => {
 const getDashboardIncentives = async (req, res) => {
     try {
         const isAdmin = req.user.role === 'admin';
+        const settings = await OfficeSettings.findOne();
+        const dailyTargetValue = settings?.dailyTarget || 10;
         const incentivePerCard = 200;
-        const dailyTarget = 10;
 
-        // Build match filter for all-time
+        // Build match filter
         const saleMatch = { status: 'Approved' };
         if (!isAdmin) {
             saleMatch.sellerId = new mongoose.Types.ObjectId(req.user._id);
         }
 
-        // 1. Aggregate All-Time sales data per seller
-        const salesData = await Sale.aggregate([
+        // 1. Get All Sales grouped by Seller and Date to calculate total net incentive
+        const salesBySellerAndDay = await Sale.aggregate([
             { $match: saleMatch },
             {
                 $group: {
-                    _id: '$sellerId',
-                    cardsSold: { $sum: 1 },
-                    totalSalesAmount: { $sum: '$amount' }
+                    _id: { 
+                        sellerId: '$sellerId', 
+                        date: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "Asia/Kolkata" } } 
+                    },
+                    count: { $sum: 1 },
+                    amount: { $sum: '$amount' }
+                }
+            },
+            {
+                $group: {
+                    _id: '$_id.sellerId',
+                    cardsSold: { $sum: '$count' },
+                    totalSalesAmount: { $sum: '$amount' },
+                    dailyBreakdown: {
+                        $push: {
+                            date: '$_id.date',
+                            count: '$count'
+                        }
+                    }
                 }
             },
             {
@@ -193,11 +244,10 @@ const getDashboardIncentives = async (req, res) => {
                     as: 'sellerInfo'
                 }
             },
-            { $unwind: '$sellerInfo' },
-            { $sort: { cardsSold: -1 } }
+            { $unwind: '$sellerInfo' }
         ]);
 
-        // 2. Aggregate Today's sales data per seller
+        // 2. Today's sales count
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date();
@@ -213,12 +263,7 @@ const getDashboardIncentives = async (req, res) => {
 
         const dailyData = await Sale.aggregate([
             { $match: dailyMatch },
-            {
-                $group: {
-                    _id: '$sellerId',
-                    todayCount: { $sum: 1 }
-                }
-            }
+            { $group: { _id: '$sellerId', todayCount: { $sum: 1 } } }
         ]);
 
         const dailyMap = {};
@@ -226,20 +271,14 @@ const getDashboardIncentives = async (req, res) => {
             dailyMap[d._id.toString()] = d.todayCount;
         });
 
-        // 3. Get pending incentives per seller from the Incentive model
+        // 3. Pending records
         const pendingMatch = { status: 'Pending' };
         if (!isAdmin) {
             pendingMatch.sellerId = new mongoose.Types.ObjectId(req.user._id);
         }
         const pendingData = await Incentive.aggregate([
             { $match: pendingMatch },
-            {
-                $group: {
-                    _id: '$sellerId',
-                    pendingAmount: { $sum: '$amount' },
-                    pendingCount: { $sum: 1 }
-                }
-            }
+            { $group: { _id: '$sellerId', pendingAmount: { $sum: '$amount' }, pendingCount: { $sum: 1 } } }
         ]);
 
         const pendingMap = {};
@@ -247,12 +286,19 @@ const getDashboardIncentives = async (req, res) => {
             pendingMap[p._id.toString()] = p;
         });
 
-        // 4. Build final response
-        const result = salesData.map(seller => {
+        // 4. Build final response with threshold logic
+        const result = salesBySellerAndDay.map(seller => {
             const sellerId = seller._id.toString();
             const pending = pendingMap[sellerId] || { pendingAmount: 0, pendingCount: 0 };
             const todayCount = dailyMap[sellerId] || 0;
-            const totalIncentive = seller.cardsSold * incentivePerCard;
+
+            // Calculate total incentive based on daily threshold
+            let totalIncentive = 0;
+            seller.dailyBreakdown.forEach(day => {
+                if (day.count > dailyTargetValue) {
+                    totalIncentive += (day.count - dailyTargetValue) * incentivePerCard;
+                }
+            });
 
             return {
                 _id: seller._id,
@@ -263,7 +309,7 @@ const getDashboardIncentives = async (req, res) => {
                 pendingIncentive: pending.pendingAmount,
                 pendingCount: pending.pendingCount,
                 dailyCount: todayCount,
-                dailyTarget: dailyTarget
+                dailyTarget: dailyTargetValue
             };
         });
 

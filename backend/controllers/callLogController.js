@@ -38,7 +38,7 @@ const getCallLogs = async (req, res) => {
         }
 
         const callLogs = await CallLog.find(query)
-            .populate('leadId', 'name phone')
+            .populate('leadId', 'name phoneNumber')
             .populate('sellerId', 'name')
             .sort('-createdAt');
 

@@ -1,5 +1,7 @@
 const Task = require('../models/Task');
 const Sale = require('../models/Sale');
+const OfficeSettings = require('../models/OfficeSettings');
+const mongoose = require('mongoose');
 
 // @desc    Create a new task
 // @route   POST /api/tasks
@@ -35,35 +37,56 @@ const getTasks = async (req, res) => {
             tasks = await Task.find({ assignedTo: req.user._id }).populate('assignedTo', 'name email');
         }
 
+        const settings = await OfficeSettings.findOne();
+        const dailyTargetValue = settings?.dailyTarget || 10;
+        const incentivePerCard = 200;
+
         // Calculate dynamic progress for tasks with card targets
         const tasksWithProgress = await Promise.all(tasks.map(async (task) => {
             const taskObj = task.toObject();
             if (task.targetCards > 0) {
-                // Ensure date bounds cover the full days
                 const startOfDay = new Date(task.createdAt);
                 startOfDay.setHours(0, 0, 0, 0);
                 
                 const endOfDay = new Date(task.dueDate);
                 endOfDay.setHours(23, 59, 59, 999);
 
-                const sellerId = task.assignedTo ? (task.assignedTo._id || task.assignedTo) : null;
+                const sellerIdRaw = task.assignedTo ? (task.assignedTo._id || task.assignedTo) : null;
+                const sellerId = sellerIdRaw ? new mongoose.Types.ObjectId(sellerIdRaw.toString()) : null;
 
-                const count = await Sale.countDocuments({
-                    sellerId: sellerId,
-                    status: 'Approved',
-                    date: { $gte: startOfDay, $lte: endOfDay }
+                // Group sales by day within the task range
+                const dailyPerformance = await Sale.aggregate([
+                    {
+                        $match: {
+                            sellerId: sellerId,
+                            status: { $in: ['Approved', 'Pending'] },
+                            date: { $gte: startOfDay, $lte: endOfDay }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "Asia/Kolkata" } },
+                            count: { $sum: 1 }
+                        }
+                    }
+                ]);
+
+                let totalCount = 0;
+                let taskIncentive = 0;
+                dailyPerformance.forEach(day => {
+                    totalCount += day.count;
+                    if (day.count > dailyTargetValue) {
+                        taskIncentive += (day.count - dailyTargetValue) * incentivePerCard;
+                    }
                 });
                 
-                // If the task is manually marked as Completed, assume the target was met
                 if (task.status === 'Completed') {
-                    taskObj.actualCards = Math.max(count, task.targetCards);
+                    taskObj.actualCards = Math.max(totalCount, task.targetCards);
                 } else {
-                    taskObj.actualCards = count;
+                    taskObj.actualCards = totalCount;
                 }
 
-                // Calculate incentive earned (₹200 per card sold)
-                const incentivePerCard = 200;
-                taskObj.incentiveAmount = taskObj.actualCards * incentivePerCard;
+                taskObj.incentiveAmount = taskIncentive;
             }
             return taskObj;
         }));

@@ -238,6 +238,21 @@ const Leads = () => {
                                 <div className="px-4 py-1.5 rounded-full bg-blue-50 dark:bg-blue-500/10 border border-blue-100 text-xs font-medium text-blue-700 dark:text-blue-400">
                                     Assigned to: {lead.assignedTo?.name || 'Unassigned'}
                                 </div>
+
+                                {lead.lastCall && (
+                                    <div className="flex items-center gap-3 px-4 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-right-2 duration-300">
+                                        <div className="flex items-center gap-1.5">
+                                            <MessageSquare size={14} className="text-blue-500" />
+                                            <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase">Last Interaction:</span>
+                                            <span className="text-xs font-bold text-gray-900 dark:text-slate-100">{lead.lastCall.sellerName}</span>
+                                        </div>
+                                        <div className="w-1 h-1 rounded-full bg-gray-300 dark:bg-slate-700" />
+                                        <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                                            <Clock size={12} strokeWidth={3} />
+                                            <span className="text-xs font-black">{lead.lastCall.duration || '0s'}</span>
+                                        </div>
+                                    </div>
+                                )}
                                 
                                 <div className="relative">
                                     <button onClick={() => setOpenDropdownId(openDropdownId === lead._id ? null : lead._id)} className="p-2 text-gray-400 hover:text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700/50 rounded-xl transition-all">
