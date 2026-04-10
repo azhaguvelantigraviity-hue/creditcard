@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, Mail, Lock, Loader2, ScanFace, Camera, RefreshCw, Smartphone } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Loader2, ScanFace, Camera, RefreshCw, Smartphone, Eye, EyeOff } from 'lucide-react';
 import * as faceService from '../services/faceService';
 
 const Login = () => {
@@ -9,6 +9,7 @@ const Login = () => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const [loginMode, setLoginMode] = useState('face'); // 'face' or 'password'
     const [modelsLoaded, setModelsLoaded] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
@@ -196,13 +197,21 @@ const Login = () => {
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                     <input
-                                        type="password"
+                                        type={showPassword ? 'text' : 'password'}
                                         required
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sbi-accent focus:border-transparent outline-none transition-all bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white focus:bg-white dark:focus:bg-slate-800"
+                                        className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sbi-accent focus:border-transparent outline-none transition-all bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white focus:bg-white dark:focus:bg-slate-800"
                                         placeholder="••••••••"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(p => !p)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 transition-colors"
+                                        tabIndex={-1}
+                                    >
+                                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
                                 </div>
                             </div>
 

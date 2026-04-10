@@ -15,7 +15,9 @@ import {
     CheckCircle,
     Camera,
     RefreshCw,
-    ScanFace
+    ScanFace,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import * as faceService from '../services/faceService';
 
@@ -53,6 +55,7 @@ const Users = () => {
     const [tempPassword, setTempPassword] = useState('');
     const [capturedDescriptor, setCapturedDescriptor] = useState(null);
     const [isCameraActive, setIsCameraActive] = useState(false);
+    const [showPassword, setShowPassword] = useState(true);
 
     useEffect(() => {
         faceService.loadModels();
@@ -457,14 +460,24 @@ const Users = () => {
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 ml-1">
                                     {selectedUser ? 'Reset Password (Leave blank to keep current)' : 'Initial Password'}
                                 </label>
-                                <input 
-                                    name="password"
-                                    type="password" 
-                                    value={formData.password}
-                                    onChange={handleInputChange}
-                                    placeholder={selectedUser ? 'Enter new password' : 'Empty for auto-generated'} 
-                                    className="w-full p-3.5 border border-gray-200 dark:border-gray-800 rounded-xl focus:ring-2 focus:ring-sbi-blue focus:border-transparent outline-none transition-all"
-                                />
+                                <div className="relative">
+                                    <input 
+                                        name="password"
+                                        type={showPassword ? 'text' : 'password'} 
+                                        value={formData.password}
+                                        onChange={handleInputChange}
+                                        placeholder={selectedUser ? 'Enter new password' : 'Empty for auto-generated'} 
+                                        className="w-full p-3.5 pr-12 border border-gray-200 dark:border-gray-800 rounded-xl focus:ring-2 focus:ring-sbi-blue focus:border-transparent outline-none transition-all"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-sbi-blue transition-colors p-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-500/10"
+                                        title={showPassword ? 'Hide password' : 'Show password'}
+                                    >
+                                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                    </button>
+                                </div>
                             </div>
 
                             {!selectedUser && (

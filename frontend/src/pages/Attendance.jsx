@@ -180,23 +180,7 @@ const StaffView = () => {
         fetchSettings();
     }, [fetchTodayStatus, fetchMovementLogs, fetchSettings]);
 
-    // Auto-logout check at 6:30 PM
-    useEffect(() => {
-        if (!session?.isActive) return;
-        const autoCheck = setInterval(async () => {
-            const now = new Date();
-            const logoutH = parseInt((settings?.autoLogoutTime || '18:30').split(':')[0]);
-            const logoutM = parseInt((settings?.autoLogoutTime || '18:30').split(':')[1]);
-            const currentTotalMin = now.getHours() * 60 + now.getMinutes();
-            const logoutTotalMin = logoutH * 60 + logoutM;
-            
-            if (currentTotalMin >= logoutTotalMin) {
-                // Auto logout assumes 'Official' and skips face for automated process
-                finalizeLogout('Official');
-            }
-        }, 60000);
-        return () => clearInterval(autoCheck);
-    }, [session, settings]);
+    // Auto-logout is disabled — sessions run for 24 hrs until manual logout
 
     // Geo-fence polling every 3 minutes while logged in (office mode)
     useEffect(() => {
