@@ -62,7 +62,14 @@ connectDB().then(async () => {
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        process.env.FRONTEND_URL || 'https://sbi-frontend.vercel.app'
+    ],
+    credentials: true
+}));
 app.use(express.json());
 
 // Routes
