@@ -283,101 +283,65 @@ const getAdminIncentiveSummary = async (req, res) => {
 const getDashboardIncentives = async (req, res) => {
     try {
         const isAdmin = req.user.role === 'admin';
+        const isTL = req.user.role === 'tl';
         const settings = await OfficeSettings.findOne();
         const dailyTargetValue = settings?.dailyTarget || 10;
         const incentivePerCard = 200;
 
-        // Build match filter
-        const saleMatch = { status: 'Approved' };
-        if (!isAdmin) {
-            saleMatch.sellerId = new mongoose.Types.ObjectId(req.user._id);
+        // Build user filter
+        const userMatch = { role: { $in: ['seller', 'tl'] } };
+        
+        if (isTL) {
+            // Team leader sees their team members (by ID match) and themselves
+            const userId = new mongoose.Types.ObjectId(req.user._id);
+            userMatch.$or = [{ teamLeaderId: userId }, { _id: userId }];
+        } else if (!isAdmin) {
+            userMatch._id = new mongoose.Types.ObjectId(req.user._id);
         }
 
-        // 1. Get All Sales grouped by Seller and Date to calculate total net incentive
-        const salesBySellerAndDay = await Sale.aggregate([
-            { $match: saleMatch },
-            {
-                $group: {
-                    _id: { 
-                        sellerId: '$sellerId', 
-                        date: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "Asia/Kolkata" } } 
-                    },
-                    count: { $sum: 1 },
-                    amount: { $sum: '$amount' }
-                }
-            },
-            {
-                $group: {
-                    _id: '$_id.sellerId',
-                    cardsSold: { $sum: '$count' },
-                    totalSalesAmount: { $sum: '$amount' },
-                    dailyBreakdown: {
-                        $push: {
-                            date: '$_id.date',
-                            count: '$count'
-                        }
+        // 1. Get ALL Sellers
+        const allSellers = await User.find(userMatch, 'name');
+
+        // 2. Get today's range in Asia/Kolkata
+        // 2. Get today's range in Asia/Kolkata correctly
+        const now = new Date();
+        const istDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+        const startOfDay = new Date(`${istDateStr}T00:00:00.000+05:30`);
+        const endOfDay = new Date(`${istDateStr}T23:59:59.999+05:30`);
+
+        // 3. Aggregate all relevant data in one pass if possible, or build a map
+        const sellerData = await Promise.all(allSellers.map(async (seller) => {
+            const sellerId = seller._id;
+
+            // Approved Sales for this seller
+            const approvedSalesData = await Sale.aggregate([
+                { $match: { sellerId, status: 'Approved' } },
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "Asia/Kolkata" } },
+                        count: { $sum: 1 }
                     }
                 }
-            },
-            {
-                $lookup: {
-                    from: 'users',
-                    localField: '_id',
-                    foreignField: '_id',
-                    as: 'sellerInfo'
-                }
-            },
-            { $unwind: '$sellerInfo' }
-        ]);
+            ]);
 
-        // 2. Today's sales count
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date();
-        endOfDay.setHours(23, 59, 59, 999);
+            // Today's specific count
+            const todaySaleCount = await Sale.countDocuments({
+                sellerId,
+                status: 'Approved',
+                date: { $gte: startOfDay, $lte: endOfDay }
+            });
 
-        const dailyMatch = { 
-            status: 'Approved',
-            date: { $gte: startOfDay, $lte: endOfDay }
-        };
-        if (!isAdmin) {
-            dailyMatch.sellerId = new mongoose.Types.ObjectId(req.user._id);
-        }
+            // Pending Incentive Amount
+            const pendingIncentiveData = await Incentive.aggregate([
+                { $match: { sellerId, status: 'Pending' } },
+                { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+            ]);
 
-        const dailyData = await Sale.aggregate([
-            { $match: dailyMatch },
-            { $group: { _id: '$sellerId', todayCount: { $sum: 1 } } }
-        ]);
+            const pendingAmt = pendingIncentiveData[0]?.total || 0;
+            const pendingCount = pendingIncentiveData[0]?.count || 0;
 
-        const dailyMap = {};
-        dailyData.forEach(d => {
-            dailyMap[d._id.toString()] = d.todayCount;
-        });
-
-        // 3. Pending records
-        const pendingMatch = { status: 'Pending' };
-        if (!isAdmin) {
-            pendingMatch.sellerId = new mongoose.Types.ObjectId(req.user._id);
-        }
-        const pendingData = await Incentive.aggregate([
-            { $match: pendingMatch },
-            { $group: { _id: '$sellerId', pendingAmount: { $sum: '$amount' }, pendingCount: { $sum: 1 } } }
-        ]);
-
-        const pendingMap = {};
-        pendingData.forEach(p => {
-            pendingMap[p._id.toString()] = p;
-        });
-
-        // 4. Build final response with threshold logic
-        const result = salesBySellerAndDay.map(seller => {
-            const sellerId = seller._id.toString();
-            const pending = pendingMap[sellerId] || { pendingAmount: 0, pendingCount: 0 };
-            const todayCount = dailyMap[sellerId] || 0;
-
-            // Calculate total incentive based on daily threshold using Advanced Tiers
+            // Calculate tiered incentive from sales history
             let totalIncentive = 0;
-            
             const bronzeStart = settings?.tierBronzeStart || 11;
             const silverStart = settings?.tierSilverStart || 16;
             const goldStart = settings?.tierGoldStart || 21;
@@ -386,38 +350,36 @@ const getDashboardIncentives = async (req, res) => {
             const silverPayout = settings?.tierSilverPayout || 225;
             const goldPayout = settings?.tierGoldPayout || 250;
 
-            seller.dailyBreakdown.forEach(day => {
+            let totalApprovedCards = 0;
+            approvedSalesData.forEach(day => {
+                totalApprovedCards += day.count;
                 for (let i = 1; i <= day.count; i++) {
-                    if (i >= goldStart) {
-                        totalIncentive += goldPayout;
-                    } else if (i >= silverStart) {
-                        totalIncentive += silverPayout;
-                    } else if (i >= bronzeStart) {
-                        totalIncentive += bronzePayout;
-                    }
+                    if (i >= goldStart) totalIncentive += goldPayout;
+                    else if (i >= silverStart) totalIncentive += silverPayout;
+                    else if (i >= bronzeStart) totalIncentive += bronzePayout;
                 }
             });
 
             let currentTier = 'Unranked';
-            if (todayCount >= goldStart) currentTier = 'Gold';
-            else if (todayCount >= silverStart) currentTier = 'Silver';
-            else if (todayCount >= bronzeStart) currentTier = 'Bronze';
+            if (todaySaleCount >= goldStart) currentTier = 'Gold';
+            else if (todaySaleCount >= silverStart) currentTier = 'Silver';
+            else if (todaySaleCount >= bronzeStart) currentTier = 'Bronze';
 
             return {
-                _id: seller._id,
-                sellerName: seller.sellerInfo.name,
-                cardsSold: seller.cardsSold,
-                incentivePerCard: incentivePerCard,
+                _id: sellerId,
+                sellerName: seller.name,
+                cardsSold: totalApprovedCards,
+                incentivePerCard: 200,
                 totalIncentive: totalIncentive,
-                pendingIncentive: pending.pendingAmount,
-                pendingCount: pending.pendingCount,
-                dailyCount: todayCount,
+                pendingIncentive: pendingAmt,
+                pendingCount: pendingCount,
+                dailyCount: todaySaleCount,
                 dailyTarget: dailyTargetValue,
                 currentTier: currentTier
             };
-        });
+        }));
 
-        res.json(result);
+        res.json(sellerData);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

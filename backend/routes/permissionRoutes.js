@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, admin } = require('../middleware/authMiddleware');
-const { createPermission, getPermissions, updatePermissionStatus } = require('../controllers/permissionController');
+const { createPermission, getPermissions, updatePermissionStatus, deletePermission } = require('../controllers/permissionController');
 
 router.route('/')
     .post(protect, createPermission)
@@ -9,5 +9,8 @@ router.route('/')
 
 router.route('/:id/status')
     .patch(protect, admin, updatePermissionStatus);
+
+router.route('/:id')
+    .delete(protect, deletePermission);
 
 module.exports = router;

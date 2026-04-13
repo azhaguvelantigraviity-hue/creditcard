@@ -37,24 +37,37 @@ const seedData = async () => {
             phoneNumber: '9876543210'
         });
 
+        // Create Team Leader
+        const teamLeader = await User.create({
+            name: 'Vikram Singh (TL)',
+            email: 'tl@sbi.com',
+            password: 'SBI@1234',
+            role: 'tl',
+            phoneNumber: '9000000001',
+            status: 'active'
+        });
+
         // Create Sellers
         const seller1 = await User.create({
             name: 'Rahul Sharma',
             email: 'rahul@sbi.com',
-            password: 'sellerpassword',
+            password: 'SBI@1234',
             role: 'seller',
-            phoneNumber: '9123456780'
+            phoneNumber: '9123456780',
+            teamLeaderId: teamLeader._id,
+            status: 'active'
         });
 
         const seller2 = await User.create({
             name: 'Priya Verma',
             email: 'priya@sbi.com',
-            password: 'sellerpassword',
+            password: 'SBI@1234',
             role: 'seller',
-            phoneNumber: '9234567810'
+            phoneNumber: '9234567810',
+            status: 'active'
         });
 
-        console.log('Users Seeded!');
+        console.log('Users (including TL) Seeded!');
 
         // Create Leads
         const leads = await Lead.insertMany([

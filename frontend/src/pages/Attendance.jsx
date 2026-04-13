@@ -16,7 +16,16 @@ import FaceScannerModal from '../components/FaceScannerModal';
 // ─── Helpers ────────────────────────────────────────────────────
 const formatTime = (date) => {
     if (!date) return '—';
-    return new Date(date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const d = new Date(date);
+    const today = new Date();
+    const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    
+    // Append the short date if it's not today (to avoid confusion with multi-day sessions)
+    if (d.toDateString() !== today.toDateString()) {
+        const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+        return `${timeStr} (${dateStr})`;
+    }
+    return timeStr;
 };
 
 const formatDuration = (minutes) => {
@@ -141,6 +150,7 @@ const StaffView = () => {
     const [actionLoading, setActionLoading] = useState(false);
     const [movementLogs, setMovementLogs] = useState([]);
     const [settings, setSettings] = useState(null);
+    const [shift, setShift] = useState('Day');
     const geoWatchRef = useRef(null);
     const pollRef = useRef(null);
 
@@ -231,33 +241,35 @@ const StaffView = () => {
         setLoginError('');
         setActionLoading(true);
         try {
-            let locationData = {};
-            if (mode === 'office') {
-                const loc = await getLocation();
-                locationData = { lat: loc.lat, lng: loc.lng };
-            } else {
-                try {
-                    const loc = await getLocation();
-                    locationData = { lat: loc.lat, lng: loc.lng };
-                } catch (_) {}
-            }
+            const loc = await getLocation();
+            const locationData = { lat: loc.lat, lng: loc.lng };
             setTempLocation(locationData);
             setShowLoginFaceScanner(true);
         } catch (err) {
-            setLoginError(err.response?.data?.message || 'Login failed. Please try again.');
+            setLoginError('Location access is required to Clock In. Please enable GPS.');
         } finally {
-            setActionLoading(true); // stay loading until face verify or cancel
+            setActionLoading(false);
         }
     };
 
     const handleLoginFaceVerify = async (descriptor) => {
         try {
-            const { data } = await api.post('/attendance/login', { mode, ...tempLocation, faceDescriptor: descriptor });
+            const { data } = await api.post('/attendance/login', { 
+                mode, 
+                ...tempLocation, 
+                shift,
+                faceDescriptor: descriptor 
+            });
             setSession(data.attendance);
             setIsInsideOffice(true);
             setShowLoginFaceScanner(false);
         } catch (err) {
-            setLoginError(err.response?.data?.message || 'Verification failed.');
+            const msg = err.response?.data?.message || 'Verification failed.';
+            setLoginError(msg);
+            // If session already exists, sync state automatically after a delay
+            if (msg.toLowerCase().includes('active session')) {
+                setTimeout(() => fetchTodayStatus(), 2000);
+            }
         } finally {
             setActionLoading(false);
         }
@@ -281,13 +293,18 @@ const StaffView = () => {
     const finalizeLogout = async (reason) => {
         setActionLoading(true);
         try {
-            const { data } = await api.post('/attendance/logout', { logoutReason: reason });
+            const loc = await getLocation();
+            const { data } = await api.post('/attendance/logout', { 
+                logoutReason: reason,
+                lat: loc.lat,
+                lng: loc.lng
+            });
             setSession(data.attendance);
             setOpenMovement(null);
             fetchMovementLogs();
             setShowLogoutFaceScanner(false);
         } catch (err) {
-            console.error(err);
+            alert(err.response?.data?.message || 'Logout failed. You must be at the office to Clock Out.');
         } finally {
             setActionLoading(false);
         }
@@ -355,8 +372,20 @@ const StaffView = () => {
             )}
 
             {/* Hero Card */}
-            <div className="bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#1e3a8a] p-8 rounded-[2.5rem] text-white relative overflow-hidden shadow-2xl">
-                <div className="absolute right-4 top-4 opacity-10"><Shield size={120} /></div>
+            <div className={`transition-all duration-700 p-8 rounded-[2.5rem] text-white relative overflow-hidden shadow-2xl border border-white/10 ${
+                shift === 'Day' 
+                    ? 'bg-gradient-to-br from-blue-900 via-indigo-900 to-amber-900/40' 
+                    : 'bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900'
+            }`}>
+                {/* Dynamic Aurora Glow */}
+                <div className={`absolute -right-20 -top-20 w-80 h-80 rounded-full blur-[100px] transition-all duration-1000 opacity-20 ${
+                    shift === 'Day' ? 'bg-amber-400' : 'bg-indigo-400'
+                }`}></div>
+                <div className={`absolute -left-20 -bottom-20 w-80 h-80 rounded-full blur-[100px] transition-all duration-1000 opacity-10 ${
+                    mode === 'office' ? 'bg-blue-400' : 'bg-purple-400'
+                }`}></div>
+
+                <div className="absolute right-4 top-4 opacity-5"><Shield size={120} /></div>
                 <div className="relative z-10">
                     <div className="flex items-center justify-between mb-6">
                         <div>
@@ -380,7 +409,12 @@ const StaffView = () => {
                     {/* Timer */}
                     {isLoggedIn && (
                         <div className="bg-white dark:bg-slate-800/10 backdrop-blur-md rounded-2xl p-5 mb-6 border border-white/10">
-                            <p className="text-blue-200 text-xs font-bold uppercase tracking-widest mb-2">Working Time</p>
+                            <div className="flex justify-between items-center mb-2">
+                                <p className="text-blue-200 text-xs font-bold uppercase tracking-widest">Working Time</p>
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tighter ${session.shift === 'Night' ? 'bg-indigo-500 text-white' : 'bg-amber-400 text-amber-900'}`}>
+                                    {session.shift || 'Day'} Shift
+                                </span>
+                            </div>
                             <WorkingTimer loginTime={session.loginTime} />
                             <div className="flex gap-4 mt-3 text-xs text-blue-200 font-medium">
                                 <span>Login: {formatTime(session.loginTime)}</span>
@@ -439,35 +473,94 @@ const StaffView = () => {
                         </div>
                     )}
 
-                    {/* Mode Toggle (only before login) */}
+                    {/* Mode Segmented Control */}
                     {!session && (
-                        <div className="flex justify-center gap-6 mb-8 mt-4">
+                        <div className="bg-black/20 backdrop-blur-md p-1 rounded-full flex gap-1 mb-2 border border-white/5">
                             <button
                                 onClick={() => setMode('office')}
-                                className={`flex flex-col items-center justify-center w-28 h-28 gap-2 rounded-3xl font-bold text-sm transition-all duration-300 ${
-                                    mode === 'office' ? 'bg-white dark:bg-slate-800 text-blue-900 shadow-[0_10px_40px_rgba(0,0,0,0.2)] scale-105 ring-4 ring-white/30' : 'bg-white dark:bg-slate-800/10 text-white border border-white/20 hover:bg-white dark:bg-slate-800/20 hover:scale-105'
+                                className={`flex-1 flex items-center justify-center py-1.5 gap-2 rounded-full font-black transition-all duration-300 ${
+                                    mode === 'office' 
+                                        ? 'bg-blue-600 text-white shadow-lg' 
+                                        : 'text-blue-200/50 hover:text-blue-100'
                                 }`}
                             >
-                                <Building2 size={28} />
-                                <span>Office Mode</span>
+                                <Building2 size={11} />
+                                <span className="text-[9px] uppercase tracking-wider">Office</span>
                             </button>
                             <button
                                 onClick={() => setMode('remote')}
-                                className={`flex flex-col items-center justify-center w-28 h-28 gap-2 rounded-3xl font-bold text-sm transition-all duration-300 ${
-                                    mode === 'remote' ? 'bg-white dark:bg-slate-800 text-blue-900 shadow-[0_10px_40px_rgba(0,0,0,0.2)] scale-105 ring-4 ring-white/30' : 'bg-white dark:bg-slate-800/10 text-white border border-white/20 hover:bg-white dark:bg-slate-800/20 hover:scale-105'
+                                className={`flex-1 flex items-center justify-center py-1.5 gap-2 rounded-full font-black transition-all duration-300 ${
+                                    mode === 'remote' 
+                                        ? 'bg-purple-600 text-white shadow-lg' 
+                                        : 'text-blue-200/50 hover:text-blue-100'
                                 }`}
                             >
-                                <MonitorSmartphone size={28} />
-                                <span>Remote Mode</span>
+                                <MonitorSmartphone size={11} />
+                                <span className="text-[9px] uppercase tracking-wider">Remote</span>
                             </button>
                         </div>
                     )}
 
-                    {/* Error */}
+                    {/* Shift Segmented Control */}
+                    {!session && (
+                        <div className="bg-black/20 backdrop-blur-md p-1 rounded-full flex gap-1 mb-2.5 border border-white/5">
+                            <button
+                                onClick={() => setShift('Day')}
+                                className={`flex-1 flex items-center justify-center py-2 px-3 gap-2 rounded-full font-black transition-all duration-300 ${
+                                    shift === 'Day' 
+                                        ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-lg' 
+                                        : 'text-blue-200/50 hover:text-blue-100'
+                                }`}
+                            >
+                                <Clock size={11} />
+                                <div className="text-left">
+                                    <p className="text-[9px] uppercase leading-none font-black text-inherit">Day</p>
+                                    <p className="text-[7px] opacity-80 font-medium leading-tight">9:30A-6:30P</p>
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => setShift('Night')}
+                                className={`flex-1 flex items-center justify-center py-2 px-3 gap-2 rounded-full font-black transition-all duration-300 ${
+                                    shift === 'Night' 
+                                        ? 'bg-gradient-to-r from-indigo-700 to-indigo-900 text-white shadow-lg' 
+                                        : 'text-blue-200/50 hover:text-blue-100'
+                                }`}
+                            >
+                                <Shield size={11} />
+                                <div className="text-left">
+                                    <p className="text-[9px] uppercase leading-none font-black text-inherit">Night</p>
+                                    <p className="text-[7px] opacity-80 font-medium leading-tight">8:30P-5:30A</p>
+                                </div>
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Mode Info (Static) */}
+                    {!session && (
+                        <div className={`backdrop-blur-md rounded-lg p-1.5 mb-3 border flex items-center gap-3 transition-all ${
+                            mode === 'office' ? 'bg-blue-600/10 border-blue-400/20' : 'bg-indigo-600/10 border-indigo-400/20'
+                        }`}>
+                            <div className={`w-7 h-7 rounded flex items-center justify-center shadow-lg shrink-0 ${
+                                mode === 'office' ? 'bg-blue-500' : 'bg-indigo-500'
+                            }`}>
+                                {mode === 'office' ? <MapPin size={13} className="text-white" /> : <MonitorSmartphone size={13} className="text-white" />}
+                            </div>
+                            <div className="text-left">
+                                <h3 className="text-[10px] font-black uppercase tracking-tight italic leading-none">{mode === 'office' ? 'Office Zone' : 'Remote Mode'}</h3>
+                                <p className="text-blue-100 text-[8px] font-medium opacity-80">
+                                    {mode === 'office' ? 'Strict 100m Radius enforced.' : 'Location Agnostic access granted.'}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Error / Warning Alert */}
                     {loginError && (
-                        <div className="bg-red-500/20 border border-red-400/30 text-red-200 rounded-2xl px-4 py-3 text-sm font-medium mb-4 flex items-center gap-2">
-                            <AlertCircle size={16} />
-                            {loginError}
+                        <div className="bg-red-500/10 border border-red-500/30 backdrop-blur-md text-red-100 rounded-2xl px-5 py-3.5 text-xs font-bold mb-4 flex items-center gap-3 animate-in slide-in-from-top duration-300">
+                            <div className="bg-red-500 rounded-full p-1.5 shadow-lg shadow-red-500/40">
+                                <AlertCircle size={14} className="text-white" />
+                            </div>
+                            <span className="flex-1 opacity-90">{loginError}</span>
                         </div>
                     )}
 
@@ -477,25 +570,30 @@ const StaffView = () => {
                             <button
                                 onClick={handleLoginInitiate}
                                 disabled={actionLoading}
-                                className="w-64 flex items-center justify-center gap-2 bg-green-400 text-green-900 font-black py-3 rounded-xl hover:bg-green-300 transition-all active:scale-95 disabled:opacity-60 shadow-lg shadow-green-400/20 text-base"
+                                className="w-64 flex items-center justify-center gap-3 bg-[#00e676] text-slate-950 font-black py-4 rounded-full hover:bg-[#00c853] transition-all active:scale-95 disabled:opacity-60 shadow-[0_10px_20px_rgba(0,230,118,0.3)] text-base group"
                             >
-                                {actionLoading && !showLoginFaceScanner ? <div className="w-5 h-5 border-2 border-green-900 border-t-transparent rounded-full animate-spin"></div> : <LogIn size={20} />}
-                                {actionLoading && !showLoginFaceScanner ? 'Checking Location...' : `Login (${mode === 'office' ? '🏢 Office' : '💻 Remote'})`}
+                                {actionLoading && !showLoginFaceScanner 
+                                    ? <div className="w-5 h-5 border-3 border-slate-950 border-t-transparent rounded-full animate-spin"></div> 
+                                    : <LogIn size={20} className="group-hover:translate-x-1 transition-transform" />
+                                }
+                                <span className="tracking-tight italic font-black">
+                                    {actionLoading && !showLoginFaceScanner ? 'Checking GPS...' : `Login (${shift} Shift)`}
+                                </span>
                             </button>
                         )}
                         {isLoggedIn && (
                             <button
                                 onClick={handleLogoutInitiate}
                                 disabled={actionLoading}
-                                className="w-64 flex items-center justify-center gap-2 bg-red-400 text-white font-black py-3 rounded-xl hover:bg-red-500 transition-all active:scale-95 disabled:opacity-60 shadow-lg text-base"
+                                className="w-56 flex items-center justify-center gap-2 bg-red-400 text-white font-black py-2.5 rounded-xl hover:bg-red-500 transition-all active:scale-95 disabled:opacity-60 shadow-lg text-sm"
                             >
-                                {actionLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <LogOut size={20} />}
+                                {actionLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <LogOut size={18} />}
                                 {actionLoading ? 'Logging out...' : 'Logout'}
                             </button>
                         )}
                         {isLoggedOut && (
-                            <div className="w-64 flex items-center justify-center gap-2 bg-white dark:border-transparent dark:bg-slate-800/10 text-gray-900 dark:text-white font-bold py-3 rounded-xl shadow-sm border border-gray-100 text-base">
-                                <CheckCircle2 size={18} className="text-green-500" />
+                            <div className="w-56 flex items-center justify-center gap-2 bg-white dark:border-transparent dark:bg-slate-800/10 text-gray-900 dark:text-white font-bold py-2.5 rounded-xl shadow-sm border border-gray-100 text-sm">
+                                <CheckCircle2 size={16} className="text-green-500" />
                                 Session Completed
                             </div>
                         )}
@@ -511,11 +609,9 @@ const StaffView = () => {
                             {mode === 'office' ? <MapPin size={20} /> : <Wifi size={20} />}
                         </div>
                         <div>
-                            <p className="font-bold text-gray-900 dark:text-slate-100 mb-1">{mode === 'office' ? 'Office Mode Active' : 'Remote Mode Active'}</p>
+                            <p className="font-bold text-gray-900 dark:text-slate-100 mb-1">Office Radius Verification</p>
                             <p className="text-sm text-gray-600 dark:text-slate-400">
-                                {mode === 'office'
-                                    ? `Your location will be verified. You must be within ${settings?.geofenceRadius || 100}m of the office to login.`
-                                    : 'No location restriction. You can login from anywhere. Location stored optionally.'}
+                                You must be within {settings?.geofenceRadius || 100}m of the office coordinates (Nagarabhavi) to Clock In and Clock Out.
                             </p>
                         </div>
                     </div>

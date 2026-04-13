@@ -66,9 +66,10 @@ const FaceScannerModal = ({ onVerify, onDismiss, title = "Face Verification" }) 
                 // For logout, we'll verify and then onVerify(descriptor)
                 setSuccess(true);
                 if (intervalRef.current) clearInterval(intervalRef.current);
+                // Faster automatic completion for a seamless feel
                 setTimeout(() => {
                     onVerify(Array.from(descriptor));
-                }, 1000);
+                }, 600);
             }
         } catch (err) {
             console.log("Scan attempt failed or no match");
@@ -79,8 +80,8 @@ const FaceScannerModal = ({ onVerify, onDismiss, title = "Face Verification" }) 
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                <div className="bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#1e3a8a] p-8 text-white relative">
+            <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                <div className="bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#1e3a8a] p-5 text-white relative">
                     <button 
                         onClick={onDismiss}
                         className="absolute right-6 top-6 p-2.5 hover:bg-white/20 rounded-xl transition-all"
@@ -88,17 +89,19 @@ const FaceScannerModal = ({ onVerify, onDismiss, title = "Face Verification" }) 
                         <X size={20} />
                     </button>
                     <div className="flex items-center gap-4 mb-4">
-                        <div className="p-3 bg-white/20 rounded-2xl">
-                            <ShieldCheck size={28} className="text-white" />
+                        <div className={`p-3 rounded-2xl transition-colors duration-500 ${success ? 'bg-green-400/20' : 'bg-white/20'}`}>
+                            {success ? <CheckCircle2 size={28} className="text-green-300" /> : <ShieldCheck size={28} className="text-white" />}
                         </div>
                         <div>
-                            <h3 className="text-2xl font-black">{title} Required</h3>
-                            <p className="text-blue-200 text-sm font-medium">Verify your face to complete this action</p>
+                            <h3 className="text-2xl font-black">{title}</h3>
+                            <p className="text-blue-100 text-sm font-medium opacity-80">
+                                {success ? "Authentication successful" : "Verify your face to complete this action"}
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                <div className="p-8 space-y-8">
+                <div className="p-5 space-y-5">
                     {/* Camera Feed Container */}
                     <div className="relative aspect-video bg-slate-900 rounded-[2rem] overflow-hidden shadow-2xl flex items-center justify-center border-2 border-gray-100 dark:border-slate-700">
                         <video 
@@ -122,10 +125,10 @@ const FaceScannerModal = ({ onVerify, onDismiss, title = "Face Verification" }) 
                             )}
 
                             {/* Corner Decals */}
-                            <div className="absolute top-8 left-8 w-10 h-10 border-t-4 border-l-4 border-blue-500/80 rounded-tl-xl translate-x-[-10px] translate-y-[-10px]"></div>
-                            <div className="absolute top-8 right-8 w-10 h-10 border-t-4 border-r-4 border-blue-500/80 rounded-tr-xl translate-x-[10px] translate-y-[-10px]"></div>
-                            <div className="absolute bottom-8 left-8 w-10 h-10 border-b-4 border-l-4 border-blue-500/80 rounded-bl-xl translate-x-[-10px] translate-y-[10px]"></div>
-                            <div className="absolute bottom-8 right-8 w-10 h-10 border-b-4 border-r-4 border-blue-500/80 rounded-br-xl translate-x-[10px] translate-y-[10px]"></div>
+                            <div className="absolute top-4 left-4 w-6 h-6 border-t-4 border-l-4 border-blue-500/80 rounded-tl-lg translate-x-[-5px] translate-y-[-5px]"></div>
+                            <div className="absolute top-4 right-4 w-6 h-6 border-t-4 border-r-4 border-blue-500/80 rounded-tr-lg translate-x-[5px] translate-y-[-5px]"></div>
+                            <div className="absolute bottom-4 left-4 w-6 h-6 border-b-4 border-l-4 border-blue-500/80 rounded-bl-lg translate-x-[-5px] translate-y-[5px]"></div>
+                            <div className="absolute bottom-4 right-4 w-6 h-6 border-b-4 border-r-4 border-blue-500/80 rounded-br-lg translate-x-[5px] translate-y-[5px]"></div>
 
                             {/* Success Overlay */}
                             {success && (
@@ -163,24 +166,27 @@ const FaceScannerModal = ({ onVerify, onDismiss, title = "Face Verification" }) 
                     </div>
 
                     <div className="text-center">
-                        <div className="flex items-center justify-center gap-3 mb-4">
-                            <div className={`p-1.5 rounded-full ${success ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                                <ScanFace size={16} className={isScanning ? 'animate-pulse' : ''} />
+                        <div className="flex flex-col items-center justify-center gap-3 mb-4">
+                            <div className={`p-4 rounded-full transition-all duration-500 ${success ? 'bg-green-100 text-green-600 scale-110 shadow-lg shadow-green-200' : 'bg-blue-50 text-blue-600'}`}>
+                                {success ? <CheckCircle2 size={32} /> : <ScanFace size={32} className={isScanning ? 'animate-pulse' : ''} />}
                             </div>
-                            <p className={`text-sm font-bold uppercase tracking-widest ${success ? 'text-green-600' : 'text-slate-400'}`}>
-                                {success ? "Face Verified Success" : isScanning ? "Analyzing Face..." : "Please face the camera"}
+                            <p className={`text-sm font-black uppercase tracking-[0.2em] ${success ? 'text-green-600' : 'text-slate-400'}`}>
+                                {success ? "Face Verified Success" : isScanning ? "Analyzing Bio-Data..." : "Scanning Face..."}
                             </p>
                         </div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed max-w-sm mx-auto italic">
-                            For security purposes, we require biometric verification to finalize your attendance logout.
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed max-w-xs mx-auto italic opacity-70">
+                            {success 
+                                ? "Secure verification complete. Proceeding automatically..." 
+                                : `Biometric verification is required to finalize ${title.toLowerCase()}.`
+                            }
                         </p>
                     </div>
 
                     <button
                         onClick={onDismiss}
-                        className="w-full py-4 text-gray-500 dark:text-slate-400 font-bold rounded-2xl hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-all text-sm uppercase tracking-widest"
+                        className="w-full py-3.5 text-gray-500 dark:text-slate-400 font-bold rounded-2xl hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-all text-[11px] uppercase tracking-widest border border-transparent hover:border-gray-100 dark:hover:border-slate-600"
                     >
-                        Cancel logout
+                        Cancel {title.split(' ').pop().toLowerCase()}
                     </button>
                 </div>
             </div>

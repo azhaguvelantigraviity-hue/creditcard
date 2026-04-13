@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { 
     Search, 
     Plus, 
@@ -31,6 +32,11 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 };
 
 const Users = () => {
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
+    const isTL = user?.role === 'tl';
+    const isManager = isAdmin || isTL;
+
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -50,7 +56,8 @@ const Users = () => {
         role: 'seller',
         status: 'active',
         phoneNumber: '',
-        password: ''
+        password: '',
+        teamLeaderId: ''
     });
     const [tempPassword, setTempPassword] = useState('');
     const [capturedDescriptor, setCapturedDescriptor] = useState(null);
@@ -88,7 +95,8 @@ const Users = () => {
             role: user.role,
             status: user.status,
             phoneNumber: user.phoneNumber || '',
-            password: ''
+            password: '',
+            teamLeaderId: user.teamLeaderId ? user.teamLeaderId._id : ''
         });
         setIsModalOpen(true);
     };
@@ -155,7 +163,7 @@ const Users = () => {
             fetchUsers();
             setIsModalOpen(false);
             setSelectedUser(null);
-            setFormData({ name: '', email: '', role: 'seller', status: 'active', phoneNumber: '', password: '' });
+            setFormData({ name: '', email: '', role: 'seller', status: 'active', phoneNumber: '', password: '', teamLeaderId: '' });
         } catch (error) {
             alert(error.response?.data?.message || 'Error updating staff');
         }
@@ -210,13 +218,34 @@ const Users = () => {
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Staff Management</h1>
                     <p className="text-gray-500 dark:text-slate-400">Manage your sales agents and administrators</p>
                 </div>
-                <button 
-                    onClick={handleAddUser}
-                    className="bg-sbi-blue hover:bg-sbi-hover text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
-                >
-                    <Plus size={20} />
-                    <span>Add New Staff</span>
-                </button>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => {
+                            const csvContent = "data:text/csv;charset=utf-8," 
+                                + "Name,Email,Role,Status,Online Status,Phone,Created At\n"
+                                + filteredUsers.map(u => `"${u.name}","${u.email}","${u.role}","${u.status}","${u.isOnline ? 'Online' : 'Offline'}","${u.phoneNumber || ''}","${new Date(u.createdAt).toLocaleDateString()}"`).join("\n");
+                            const encodedUri = encodeURI(csvContent);
+                            const link = document.createElement("a");
+                            link.setAttribute("href", encodedUri);
+                            link.setAttribute("download", "staff_export.csv");
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }}
+                        className="bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 shadow-sm transition-colors active:scale-95"
+                    >
+                        Export CSV
+                    </button>
+                    {isAdmin && (
+                        <button 
+                            onClick={handleAddUser}
+                            className="bg-sbi-blue hover:bg-sbi-hover text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
+                        >
+                            <Plus size={20} />
+                            <span>Add New Staff</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex flex-col md:flex-row gap-4">
@@ -238,6 +267,7 @@ const Users = () => {
                     >
                         <option value="all">All Roles</option>
                         <option value="admin">Admins</option>
+                        <option value="tl">Team Leaders</option>
                         <option value="seller">Sellers</option>
                     </select>
 
@@ -271,9 +301,10 @@ const Users = () => {
                             <tr>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Staff Details</th>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Role</th>
-                                <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">System Filter</th>
+                                <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Live Status</th>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider text-center">Created At</th>
-                                <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider text-right">Actions</th>
+                                {isAdmin && <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider text-right">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-slate-700 bg-white dark:bg-slate-800">
@@ -292,10 +323,17 @@ const Users = () => {
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap capitalize">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center w-fit gap-1.5 ${
-                                            user.role === 'admin' ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400' : 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400'
+                                            user.role === 'admin' ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400' : 
+                                            user.role === 'tl' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' :
+                                            'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400'
                                         }`}>
                                             <Shield size={12} />
                                             {user.role}
+                                            {user.role === 'seller' && user.teamLeaderId && (
+                                                <span className="text-[9px] opacity-70 ml-1 border-l pl-1 border-current border-opacity-30">
+                                                    TL: {user.teamLeaderId.name?.split(' ')[0]}
+                                                </span>
+                                            )}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
@@ -305,30 +343,40 @@ const Users = () => {
                                             {user.status}
                                         </span>
                                     </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-2.5 h-2.5 rounded-full ${user.isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-gray-300 dark:bg-slate-600'}`}></div>
+                                            <span className={`text-sm font-bold ${user.isOnline ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-slate-400'}`}>
+                                                {user.isOnline ? 'Online' : 'Offline'}
+                                            </span>
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400 text-center">
                                         {new Date(user.createdAt).toLocaleDateString()}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button 
-                                                onClick={() => handleFaceRegisterClick(user)} 
-                                                title={user.faceDescriptor?.length > 0 ? "Update Face Recognition" : "Register Face Recognition"}
-                                                className={`p-2 rounded-lg transition-colors ${
-                                                    user.faceDescriptor?.length > 0 
-                                                    ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-500/10' 
-                                                    : 'text-gray-400 hover:text-sbi-blue hover:bg-blue-50 dark:hover:bg-blue-500/10'
-                                                }`}
-                                            >
-                                                <ScanFace size={18} />
-                                            </button>
-                                            <button onClick={() => handleEditClick(user)} className="p-2 text-gray-400 hover:text-sbi-blue hover:bg-blue-50 dark:bg-blue-500/10 rounded-lg transition-colors">
-                                                <Edit size={18} />
-                                            </button>
-                                            <button onClick={() => handleDelete(user._id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:bg-red-500/10 rounded-lg transition-colors">
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    </td>
+                                    {isAdmin && (
+                                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button 
+                                                    onClick={() => handleFaceRegisterClick(user)} 
+                                                    title={user.faceDescriptor?.length > 0 ? "Update Face Recognition" : "Register Face Recognition"}
+                                                    className={`p-2 rounded-lg transition-colors ${
+                                                        user.faceDescriptor?.length > 0 
+                                                        ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-500/10' 
+                                                        : 'text-gray-400 hover:text-sbi-blue hover:bg-blue-50 dark:hover:bg-blue-500/10'
+                                                    }`}
+                                                >
+                                                    <ScanFace size={18} />
+                                                </button>
+                                                <button onClick={() => handleEditClick(user)} className="p-2 text-gray-400 hover:text-sbi-blue hover:bg-blue-50 dark:bg-blue-500/10 rounded-lg transition-colors">
+                                                    <Edit size={18} />
+                                                </button>
+                                                <button onClick={() => handleDelete(user._id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:bg-red-500/10 rounded-lg transition-colors">
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>
@@ -347,7 +395,7 @@ const Users = () => {
                         onClick={() => {
                             setIsModalOpen(false);
                             setTempPassword('');
-                            setFormData({ name: '', email: '', role: 'seller', status: 'active', phoneNumber: '', password: '' });
+                            setFormData({ name: '', email: '', role: 'seller', status: 'active', phoneNumber: '', password: '', teamLeaderId: '' });
                             stopCamera();
                             setIsCameraActive(false);
                             setCapturedDescriptor(null);
@@ -378,7 +426,7 @@ const Users = () => {
                                 onClick={() => {
                                     setIsModalOpen(false);
                                     setTempPassword('');
-                                    setFormData({ name: '', email: '', role: 'seller', status: 'active', phoneNumber: '', password: '' });
+                                    setFormData({ name: '', email: '', role: 'seller', status: 'active', phoneNumber: '', password: '', teamLeaderId: '' });
                                     stopCamera();
                                     setIsCameraActive(false);
                                     setCapturedDescriptor(null);
@@ -439,6 +487,7 @@ const Users = () => {
                                         className="w-full p-3.5 border border-gray-200 dark:border-gray-800 rounded-xl focus:ring-2 focus:ring-sbi-blue outline-none transition-all bg-white dark:bg-slate-800"
                                     >
                                         <option value="seller">Seller</option>
+                                        <option value="tl">Team Leader</option>
                                         <option value="admin">Admin</option>
                                     </select>
                                 </div>
@@ -454,6 +503,22 @@ const Users = () => {
                                         <option value="inactive">Inactive</option>
                                     </select>
                                 </div>
+                                {formData.role === 'seller' && (
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 ml-1">Assigned Team Leader (Optional)</label>
+                                        <select 
+                                            name="teamLeaderId"
+                                            value={formData.teamLeaderId}
+                                            onChange={handleInputChange}
+                                            className="w-full p-3.5 border border-gray-200 dark:border-gray-800 rounded-xl focus:ring-2 focus:ring-sbi-blue outline-none transition-all bg-white dark:bg-slate-800"
+                                        >
+                                            <option value="">None (Unassigned)</option>
+                                            {users.filter(u => u.role === 'tl').map(tl => (
+                                                <option key={tl._id} value={tl._id}>{tl.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                             </div>
 
                             <div>

@@ -26,6 +26,11 @@ const attendanceSchema = new mongoose.Schema({
         enum: ['office', 'remote'],
         required: true
     },
+    shift: {
+        type: String,
+        enum: ['Day', 'Night'],
+        default: 'Day'
+    },
     loginLocation: {
         lat: { type: Number },
         lng: { type: Number }

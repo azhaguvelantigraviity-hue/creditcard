@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, Mail, Lock, Loader2, ScanFace, Camera, RefreshCw, Smartphone, Eye, EyeOff } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Loader2, ScanFace, Camera, RefreshCw, Smartphone, Eye, EyeOff, User, ArrowLeft } from 'lucide-react';
 import * as faceService from '../services/faceService';
 
 const Login = () => {
@@ -10,7 +10,7 @@ const Login = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const [loginMode, setLoginMode] = useState('face'); // 'face' or 'password'
+    const [loginMode, setLoginMode] = useState('password'); // 'face' or 'password'
     const [modelsLoaded, setModelsLoaded] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const videoRef = React.useRef(null);
@@ -117,7 +117,9 @@ const Login = () => {
                             <ShieldCheck size={32} />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">SBI Sales Management</h1>
-                        <p className="text-gray-500 dark:text-slate-400 text-sm mt-2">Enter your credentials to access your dashboard</p>
+                        <p className="text-gray-500 dark:text-slate-400 text-sm mt-2">
+                            Enter your credentials to access your dashboard
+                        </p>
                     </div>
 
                     {error && (

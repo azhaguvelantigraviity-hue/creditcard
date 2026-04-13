@@ -13,13 +13,19 @@ const getSettings = async () => {
 };
 
 // Helper: determine status from login time string
-const determineStatus = (loginDate, settings) => {
+const determineStatus = (loginDate, settings, shift = 'Day') => {
     const hours = loginDate.getHours();
     const minutes = loginDate.getMinutes();
     const totalMinutes = hours * 60 + minutes;
 
-    const [lateH, lateM] = settings.lateThreshold.split(':').map(Number);
-    const [halfH, halfM] = settings.halfDayThreshold.split(':').map(Number);
+    const useShift = shift === 'Night' ? 'night' : '';
+    const lateKey = useShift ? 'nightLateThreshold' : 'lateThreshold';
+    const halfKey = useShift ? 'nightHalfDayThreshold' : 'halfDayThreshold';
+
+    const [lateH, lateM] = settings[lateKey].split(':').map(Number);
+    const [halfH, halfM] = settings[halfKey].split(':').map(Number);
+    
+    // For Night Shift login (e.g. 20:30), totalMinutes (1230) is compared correctly to thresholds
     const lateLimit = lateH * 60 + lateM;
     const halfLimit = halfH * 60 + halfM;
 
@@ -33,44 +39,50 @@ const determineStatus = (loginDate, settings) => {
 // @access  Private
 const loginAttendance = async (req, res) => {
     try {
-        const { mode, lat, lng } = req.body;
+        const { mode, lat, lng, shift } = req.body;
         const settings = await getSettings();
         const today = new Date().toISOString().split('T')[0];
 
-        // Check if already logged in today
-        const existing = await Attendance.findOne({ userId: req.user._id, date: today });
-        if (existing && existing.isActive) {
-            return res.status(400).json({ message: 'You are already logged in for today.' });
-        }
-        if (existing && !existing.isActive) {
-            return res.status(400).json({ message: 'You have already logged out for today.' });
+        // Check if already logged in (active session anywhere)
+        const activeSession = await Attendance.findOne({ userId: req.user._id, isActive: true });
+        if (activeSession) {
+            return res.status(400).json({ message: 'You have an active session. Please logout first.' });
         }
 
-        // Geo-fence check for office mode
+        // Check if already logged in and out for THIS specific date
+        const existing = await Attendance.findOne({ userId: req.user._id, date: today });
+        if (existing && !existing.isActive) {
+            return res.status(400).json({ message: 'You have already completed your session for today.' });
+        }
+
+        // Geo-fence check (only for Office mode)
         if (mode === 'office') {
             if (!lat || !lng) {
-                return res.status(400).json({ message: 'Location is required for office mode.' });
+                return res.status(400).json({ message: 'GPS Location is required to Clock In (Office Mode).' });
             }
+            
             const distance = haversineDistance(
                 parseFloat(lat), parseFloat(lng),
                 settings.officeLat, settings.officeLng
             );
+            
             if (distance > settings.geofenceRadius) {
                 return res.status(403).json({
-                    message: `You are not in office location. You are ${Math.round(distance)}m away (allowed: ${settings.geofenceRadius}m).`,
+                    message: `You are not within the allowed office zone. You are ${Math.round(distance)}m away (allowed: ${settings.geofenceRadius}m).`,
                     distance: Math.round(distance)
                 });
             }
         }
 
         const loginTime = new Date();
-        const status = determineStatus(loginTime, settings);
+        const status = determineStatus(loginTime, settings, shift);
 
         const attendance = await Attendance.create({
             userId: req.user._id,
             date: today,
             loginTime,
-            mode,
+            mode: mode || 'office',
+            shift: shift || 'Day',
             status,
             isActive: true,
             loginLocation: lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : undefined
@@ -87,15 +99,43 @@ const loginAttendance = async (req, res) => {
 // @access  Private
 const logoutAttendance = async (req, res) => {
     try {
-        const today = new Date().toISOString().split('T')[0];
-        const attendance = await Attendance.findOne({ userId: req.user._id, date: today, isActive: true });
+        // Find ANY active session for this user (supports cross-midnight logout)
+        const attendance = await Attendance.findOne({ userId: req.user._id, isActive: true });
 
         if (!attendance) {
-            return res.status(404).json({ message: 'No active attendance session found for today.' });
+            return res.status(404).json({ message: 'No active attendance session found.' });
         }
 
-        const { logoutReason } = req.body;
-        const logoutTime = new Date();
+        const { logoutReason, lat, lng } = req.body;
+        const settings = await getSettings();
+
+        // Geo-fence check (only if login was Office mode)
+        if (attendance.mode === 'office') {
+            if (!lat || !lng) {
+                return res.status(400).json({ message: 'GPS Location is required to Clock Out (Office Mode).' });
+            }
+
+            const distance = haversineDistance(
+                parseFloat(lat), parseFloat(lng),
+                settings.officeLat, settings.officeLng
+            );
+
+            if (distance > settings.geofenceRadius) {
+                return res.status(403).json({
+                    message: `You must return to the office zone to Clock Out. You are currently ${Math.round(distance)}m away.`,
+                    distance: Math.round(distance)
+                });
+            }
+        }
+
+        let logoutTime = new Date();
+        
+        // Cap the maximum session duration to 24 hours to prevent extreme anomalies (e.g., 71 hours) if user forgets to logout
+        const MAX_SESSION_MS = 24 * 60 * 60 * 1000;
+        if (logoutTime.getTime() - attendance.loginTime.getTime() > MAX_SESSION_MS) {
+            logoutTime = new Date(attendance.loginTime.getTime() + MAX_SESSION_MS);
+        }
+
         const workingMs = logoutTime - attendance.loginTime;
         const workingMinutes = Math.floor(workingMs / 60000);
 
@@ -131,7 +171,14 @@ const logoutAttendance = async (req, res) => {
 const getTodayStatus = async (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];
-        const attendance = await Attendance.findOne({ userId: req.user._id, date: today });
+        
+        // 1. Check for ANY active session (crucial for cross-midnight night-shifts)
+        let attendance = await Attendance.findOne({ userId: req.user._id, isActive: true });
+        
+        // 2. If no active session, check if they already completed a session today
+        if (!attendance) {
+            attendance = await Attendance.findOne({ userId: req.user._id, date: today });
+        }
 
         if (!attendance) {
             return res.json({ status: 'not_logged_in', attendance: null });

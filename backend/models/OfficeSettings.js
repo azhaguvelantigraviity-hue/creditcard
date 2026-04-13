@@ -3,11 +3,11 @@ const mongoose = require('mongoose');
 const officeSettingsSchema = new mongoose.Schema({
     officeLat: {
         type: Number,
-        default: 12.9610 // Default: Nagarabhavi, Bengaluru
+        default: 12.961019 // Default: Nagarabhavi, Bengaluru
     },
     officeLng: {
         type: Number,
-        default: 77.5127 // Default: Nagarabhavi, Bengaluru
+        default: 77.512684 // Default: Nagarabhavi, Bengaluru
     },
     geofenceRadius: {
         type: Number,
@@ -28,6 +28,23 @@ const officeSettingsSchema = new mongoose.Schema({
     autoLogoutTime: {
         type: String,
         default: '18:30' // Auto logout at 6:30 PM
+    },
+    // NIGHT SHIFT SETTINGS
+    nightStartTime: {
+        type: String,
+        default: '20:30' // HH:MM
+    },
+    nightLateThreshold: {
+        type: String,
+        default: '20:45' // After this → Late
+    },
+    nightHalfDayThreshold: {
+        type: String,
+        default: '22:00' // At or after this → Half Day
+    },
+    nightAutoLogoutTime: {
+        type: String,
+        default: '05:30' // Auto logout at 5:30 AM
     },
     dailyTarget: {
         type: Number,

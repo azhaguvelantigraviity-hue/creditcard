@@ -14,7 +14,12 @@ import {
     Wallet,
     CreditCard,
     Award,
-    IndianRupee
+    IndianRupee,
+    PhoneIncoming,
+    PhoneMissed,
+    CheckSquare,
+    AlertCircle,
+    Activity
 } from 'lucide-react';
 import { 
     BarChart, 
@@ -32,49 +37,65 @@ import {
 
 const colorClasses = {
     blue: {
-        bg: "bg-blue-50 dark:bg-blue-500/10",
-        border: "border-blue-100 dark:border-blue-500/20",
+        bg: "bg-blue-50/80 dark:bg-blue-600/20",
+        border: "border-blue-200 dark:border-blue-400/30",
         text: "text-blue-900 dark:text-blue-100",
-        iconText: "text-blue-600 dark:text-blue-400"
-    },
-    cyan: {
-        bg: "bg-cyan-50 dark:bg-cyan-500/10",
-        border: "border-cyan-100 dark:border-cyan-500/20",
-        text: "text-cyan-900 dark:text-cyan-100",
-        iconText: "text-cyan-600 dark:text-cyan-400"
-    },
-    indigo: {
-        bg: "bg-indigo-50 dark:bg-indigo-500/10",
-        border: "border-indigo-100 dark:border-indigo-500/20",
-        text: "text-indigo-900 dark:text-indigo-100",
-        iconText: "text-indigo-600 dark:text-indigo-400"
+        iconText: "text-blue-600 dark:text-blue-400",
+        iconBg: "bg-blue-100 dark:bg-blue-500/30"
     },
     emerald: {
-        bg: "bg-emerald-50 dark:bg-emerald-500/10",
-        border: "border-emerald-100 dark:border-emerald-500/20",
+        bg: "bg-emerald-50/80 dark:bg-emerald-600/20",
+        border: "border-emerald-200 dark:border-emerald-400/30",
         text: "text-emerald-900 dark:text-emerald-100",
-        iconText: "text-emerald-600 dark:text-emerald-400"
+        iconText: "text-emerald-600 dark:text-emerald-400",
+        iconBg: "bg-emerald-100 dark:bg-emerald-500/30"
+    },
+    amber: {
+        bg: "bg-amber-50/80 dark:bg-amber-600/20",
+        border: "border-amber-200 dark:border-amber-400/30",
+        text: "text-amber-900 dark:text-amber-100",
+        iconText: "text-amber-600 dark:text-amber-400",
+        iconBg: "bg-amber-100 dark:bg-amber-500/30"
+    },
+    rose: {
+        bg: "bg-rose-50/80 dark:bg-rose-600/20",
+        border: "border-rose-200 dark:border-rose-400/30",
+        text: "text-rose-900 dark:text-rose-100",
+        iconText: "text-rose-600 dark:text-rose-400",
+        iconBg: "bg-rose-100 dark:bg-rose-500/30"
+    },
+    violet: {
+        bg: "bg-violet-50/80 dark:bg-violet-600/20",
+        border: "border-violet-200 dark:border-violet-400/30",
+        text: "text-violet-900 dark:text-violet-100",
+        iconText: "text-violet-600 dark:text-violet-400",
+        iconBg: "bg-violet-100 dark:bg-violet-500/30"
     }
 };
 
 const StatCard = ({ title, value, icon: Icon, trend, color }) => {
     const theme = colorClasses[color] || colorClasses.blue;
     return (
-        <div className={`${theme.bg} p-6 rounded-2xl shadow-sm border ${theme.border} transition-all hover:shadow-md hover:scale-[1.02] cursor-default`}>
-            <div className="flex justify-between items-start">
-                <div className={`p-3 rounded-xl bg-white dark:bg-slate-800 shadow-sm ${theme.iconText}`}>
-                    <Icon size={24} />
+        <div className={`${theme.bg} p-4.5 rounded-2xl shadow-sm border-2 ${theme.border} transition-all hover:shadow-xl hover:scale-[1.03] cursor-default relative overflow-hidden group`}>
+            {/* Ghost Background Icon */}
+            <div className={`absolute -right-6 -bottom-6 opacity-[0.05] dark:opacity-[0.1] group-hover:scale-125 transition-transform duration-700 ${theme.iconText}`}>
+                <Icon size={120} />
+            </div>
+            
+            <div className="flex justify-between items-start relative z-10">
+                <div className={`p-2.5 rounded-xl shadow-sm border ${theme.border} ${theme.iconBg} ${theme.iconText}`}>
+                    <Icon size={20} />
                 </div>
                 {trend != null && (
-                    <div className={`flex items-center text-sm font-black ${trend > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                        {trend > 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-                        <span className="ml-1">{Math.abs(trend)}%</span>
+                    <div className={`flex items-center text-xs font-black px-2 py-1 rounded-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border ${theme.border} ${trend > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                        {trend > 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                        <span className="ml-0.5">{Math.abs(trend)}%</span>
                     </div>
                 )}
             </div>
-            <div className="mt-4">
-                <h3 className="text-gray-500 dark:text-slate-400 text-sm font-bold uppercase tracking-wider">{title}</h3>
-                <p className={`text-3xl font-black ${theme.text} mt-1`}>{value}</p>
+            <div className="mt-4 relative z-10">
+                <h3 className="text-gray-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest">{title}</h3>
+                <p className={`text-2xl font-black ${theme.text} mt-0.5 tracking-tight`}>{value}</p>
             </div>
         </div>
     );
@@ -83,6 +104,7 @@ const StatCard = ({ title, value, icon: Icon, trend, color }) => {
 const Dashboard = () => {
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
+    const isTL = user?.role === 'tl';
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [incentives, setIncentives] = useState([]);
@@ -276,34 +298,96 @@ const Dashboard = () => {
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard 
-                    title={isAdmin ? "Total Sellers" : "My Sales (Cards)"} 
+                    title={isAdmin || isTL ? "Total Subordinates" : "My Sales (Cards)"} 
                     value={stats?.totalSellers || "0"} 
                     icon={Users} 
                     trend={stats?.trend?.sellers} 
                     color="blue" 
                 />
                 <StatCard 
-                    title={isAdmin ? "Active Leads" : "Assigned Leads"} 
+                    title={isAdmin || isTL ? "Active Leads" : "Assigned Leads"} 
                     value={stats?.activeLeads || "0"} 
                     icon={Target} 
                     trend={stats?.trend?.leads} 
-                    color="cyan" 
+                    color="amber" 
                 />
                 <StatCard 
                     title="Total Revenue" 
                     value={`₹${(stats?.totalSalesAmount || 0).toLocaleString()}`} 
                     icon={TrendingUp} 
                     trend={stats?.trend?.sales} 
-                    color="indigo" 
+                    color="rose" 
                 />
                 <StatCard 
                     title="Conversion Rate" 
                     value={`${stats?.conversionRate || 0}%`} 
                     icon={ShieldCheck} 
                     trend={stats?.trend?.conversion} 
-                    color="emerald" 
+                    color="violet" 
                 />
             </div>
+
+            {/* TL & Admin Special: Team Management Summaries */}
+            {(isAdmin || isTL) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Task Tracking Breakdown */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+                                <CheckSquare className="text-blue-500" /> Work Tracking (Tasks)
+                            </h2>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Team Status</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-blue-50 dark:bg-blue-500/10 p-4 rounded-xl border border-blue-100 dark:border-blue-500/20 text-center">
+                                <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase mb-1">Pending</p>
+                                <p className="text-2xl font-black text-blue-900 dark:text-blue-100">{stats?.taskStats?.pending || 0}</p>
+                            </div>
+                            <div className="bg-amber-50 dark:bg-amber-500/10 p-4 rounded-xl border border-amber-100 dark:border-amber-500/20 text-center">
+                                <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase mb-1">In Progress</p>
+                                <p className="text-2xl font-black text-amber-900 dark:text-amber-100">{stats?.taskStats?.inProgress || 0}</p>
+                            </div>
+                            <div className="bg-green-50 dark:bg-green-500/10 p-4 rounded-xl border border-green-100 dark:border-green-500/20 text-center">
+                                <p className="text-[10px] font-black text-green-600 dark:text-green-400 uppercase mb-1">Solved Today</p>
+                                <p className="text-2xl font-black text-green-900 dark:text-green-100">{stats?.taskStats?.completedToday || 0}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Call Monitoring Breakdown */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+                                <PhoneCall className="text-indigo-500" /> Call Monitoring
+                            </h2>
+                            <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-500/10 rounded-full border border-indigo-100 dark:border-indigo-500/20">
+                                <Clock size={12} className="text-indigo-600" />
+                                <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-400">AVG: {stats?.callStats?.avgDuration || '0m 0s'}</span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-gray-100 dark:border-slate-700 text-center">
+                                <p className="text-[10px] font-black text-gray-500 dark:text-slate-400 uppercase mb-1">Total</p>
+                                <p className="text-2xl font-black text-gray-900 dark:text-slate-100">{stats?.callStats?.totalCalls || 0}</p>
+                            </div>
+                            <div className="bg-green-50 dark:bg-green-500/10 p-4 rounded-xl border border-green-100 dark:border-green-500/20 text-center">
+                                <div className="flex items-center justify-center gap-1.5 mb-1">
+                                    <PhoneIncoming size={12} className="text-green-600" />
+                                    <p className="text-[10px] font-black text-green-600 dark:text-green-400 uppercase">Answered</p>
+                                </div>
+                                <p className="text-2xl font-black text-green-900 dark:text-green-100">{stats?.callStats?.answeredCalls || 0}</p>
+                            </div>
+                            <div className="bg-red-50 dark:bg-red-500/10 p-4 rounded-xl border border-red-100 dark:border-red-500/20 text-center">
+                                <div className="flex items-center justify-center gap-1.5 mb-1">
+                                    <PhoneMissed size={12} className="text-red-500" />
+                                    <p className="text-[10px] font-black text-red-500 dark:text-red-400 uppercase">Missed</p>
+                                </div>
+                                <p className="text-2xl font-black text-red-900 dark:text-white">{stats?.callStats?.missedCalls || 0}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Chart */}
@@ -383,7 +467,7 @@ const Dashboard = () => {
                         <div>
                             <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100">Incentives Overview</h2>
                             <p className="text-sm text-gray-500 dark:text-slate-400">
-                                {isAdmin ? 'All sellers performance & earnings' : 'Your sales incentive summary'}
+                                {isAdmin ? 'All sellers performance & earnings' : isTL ? 'Your team performance & earnings' : 'Your sales incentive summary'}
                             </p>
                         </div>
                     </div>
@@ -482,22 +566,25 @@ const Dashboard = () => {
                             {/* Footer totals row */}
                             <tfoot>
                                 <tr className="border-t-2 border-gray-200 dark:border-slate-600 bg-gray-50/80 dark:bg-slate-800/80">
-                                    <td className="px-6 py-4">
+                                    <td className="px-6 py-4" colSpan="2">
                                         <span className="font-black text-gray-900 dark:text-slate-100 uppercase text-xs tracking-wider">
-                                            {isAdmin ? `Total (${incentives.length} Sellers)` : 'Your Total'}
+                                            {isAdmin ? `Total Group Performance (${incentives.length} Staff)` : isTL ? `Total Team Performance (${incentives.length} Staff)` : 'Your Total Performance'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className="font-black text-gray-900 dark:text-slate-100 text-sm">{totalCardsSold}</span>
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 rounded-lg text-sm font-black border border-blue-100 dark:border-blue-500/20">
+                                            {totalCardsSold}
+                                        </span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className="font-bold text-gray-500 dark:text-slate-400 text-sm">₹200</span>
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        <span className="font-black text-orange-600 dark:text-orange-400 text-sm">₹{totalPending.toLocaleString()}</span>
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 rounded-lg text-sm font-black border border-orange-100 dark:border-orange-500/20">
+                                            ₹{totalPending.toLocaleString()}
+                                        </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <span className="text-lg font-black text-green-600 dark:text-green-400">₹{totalIncentiveAmt.toLocaleString()}</span>
+                                        <span className="text-xl font-black text-green-600 dark:text-green-400">
+                                            ₹{totalIncentiveAmt.toLocaleString()}
+                                        </span>
                                     </td>
                                 </tr>
                             </tfoot>
@@ -513,6 +600,63 @@ const Dashboard = () => {
                     )}
                 </div>
             </div>
+
+            {/* Team Performance Breakdown (Detailed Today) */}
+            {(isAdmin || isTL) && stats?.teamPerformance && stats.teamPerformance.length > 0 && (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100">Live Employee Performance</h2>
+                            <p className="text-sm text-gray-500 dark:text-slate-400">Detailed breakdown of team activity today</p>
+                        </div>
+                        <Activity className="text-sbi-blue animate-pulse" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {stats.teamPerformance.map((member, i) => (
+                            <div key={i} className="bg-gray-50 dark:bg-slate-900/50 p-5 rounded-2xl border border-gray-100 dark:border-slate-800 hover:shadow-md transition-shadow">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-blue-100 text-sbi-blue flex items-center justify-center font-bold">
+                                            {member.name.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-gray-900 dark:text-white leading-tight">{member.name}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <div className={`w-2 h-2 rounded-full ${member.status === 'Online' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                                                <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{member.status}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase">Daily Sales</p>
+                                        <p className="text-xl font-black text-gray-900 dark:text-white">{member.sales}</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800">
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-1.5 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg text-indigo-600">
+                                            <PhoneCall size={14} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Calls Done</p>
+                                            <p className="text-sm font-bold text-gray-900 dark:text-white">{member.calls}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-1.5 bg-green-50 dark:bg-green-500/10 rounded-lg text-green-600">
+                                            <CheckSquare size={14} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Tasks Fixed</p>
+                                            <p className="text-sm font-bold text-gray-900 dark:text-white">{member.tasks}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

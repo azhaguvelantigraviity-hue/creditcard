@@ -47,9 +47,9 @@ const Calls = () => {
     const [calls, setCalls] = useState([]);
     const [stats, setStats] = useState({
         totalCalls: 0,
-        successRate: '0%',
-        avgDuration: '0s',
-        missedTasks: 0
+        answeredCalls: 0,
+        missedCalls: 0,
+        avgDuration: '0s'
     });
     const [leads, setLeads] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -132,22 +132,41 @@ const Calls = () => {
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Calls Tracking</h1>
                     <p className="text-gray-500 dark:text-slate-400">Monitor and log tele-calling activities</p>
                 </div>
-                <button 
-                    onClick={() => setIsModalOpen(true)}
-                    className="bg-sbi-blue hover:bg-sbi-hover text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
-                >
-                    <Plus size={20} />
-                    <span>Log New Call</span>
-                </button>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => {
+                            const csvContent = "data:text/csv;charset=utf-8," 
+                                + "Lead Name,Phone,Seller,Type,Outcome,Date,Duration\n"
+                                + filteredCalls.map(c => `"${c.leadId?.name || 'Unknown'}","${c.leadId?.phone || ''}","${c.sellerId?.name || ''}","Call","${c.outcome}","${new Date(c.createdAt).toLocaleDateString()} ${new Date(c.createdAt).toLocaleTimeString()}","${c.duration || ''}"`).join("\n");
+                            const encodedUri = encodeURI(csvContent);
+                            const link = document.createElement("a");
+                            link.setAttribute("href", encodedUri);
+                            link.setAttribute("download", "calls_export.csv");
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }}
+                        className="bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 shadow-sm transition-colors active:scale-95"
+                    >
+                        Export CSV
+                    </button>
+                    <button 
+                        onClick={() => setIsModalOpen(true)}
+                        className="bg-sbi-blue hover:bg-sbi-hover text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
+                    >
+                        <Plus size={20} />
+                        <span>Log New Call</span>
+                    </button>
+                </div>
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
                 {[
-                    { label: 'Total Calls Today', value: stats.totalCalls, icon: Phone, color: 'blue' },
-                    { label: 'Avg Duration', value: stats.avgDuration, icon: Clock, color: 'indigo' },
-                    { label: 'Success Rate', value: stats.successRate, icon: CheckCircle2, color: 'green' },
-                    { label: 'Missed Tasks', value: stats.missedTasks, icon: PhoneMissed, color: 'red' },
+                    { label: 'Total Calls Today', value: stats.totalCalls || 0, icon: Phone, color: 'blue' },
+                    { label: 'Answered Calls', value: stats.answeredCalls || 0, icon: PhoneIncoming, color: 'green' },
+                    { label: 'Missed Calls', value: stats.missedCalls || 0, icon: PhoneMissed, color: 'red' },
+                    { label: 'Avg Duration', value: stats.avgDuration || '0m 0s', icon: Clock, color: 'indigo' },
                 ].map((stat, i) => (
                     <div key={i} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center`}>
@@ -203,7 +222,7 @@ const Calls = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
                             {filteredCalls.map((call) => (
-                                <tr key={call._id} className="hover:bg-blue-50 dark:bg-blue-500/10/30 transition-colors group">
+                                <tr key={call._id} className="hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors group">
                                     <td className="p-4 pl-8">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">

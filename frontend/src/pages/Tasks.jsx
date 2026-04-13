@@ -59,18 +59,19 @@ const Tasks = () => {
     const [todayCount, setTodayCount] = useState(0); // Today's cards count
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editSelectedTask, setEditSelectedTask] = useState(null);
+    const [userSearchTerm, setUserSearchTerm] = useState('');
     const [formData, setFormData] = useState({
         title: '',
         description: '',
         assignedTo: '',
         dueDate: '',
         priority: 'Medium',
-        targetCards: 0
+        targetCards: 10
     });
 
     useEffect(() => {
         fetchTasks();
-        if (user?.role === 'admin') {
+        if (user?.role === 'admin' || user?.role === 'tl') {
             fetchUsers();
         } else {
             fetchTodayStats();
@@ -116,7 +117,8 @@ const Tasks = () => {
             await api.post('/tasks', formData);
             setIsModalOpen(false);
             fetchTasks();
-            setFormData({ title: '', description: '', assignedTo: '', dueDate: '', priority: 'Medium', targetCards: 0 });
+            setFormData({ title: '', description: '', assignedTo: '', dueDate: '', priority: 'Medium', targetCards: 10 });
+            setUserSearchTerm('');
         } catch (error) {
             alert(error.response?.data?.message || 'Error assigning task');
         }
@@ -125,7 +127,12 @@ const Tasks = () => {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [taskToDelete, setTaskToDelete] = useState(null);
 
+    const isAdmin = user?.role === 'admin';
+    const isTL = user?.role === 'tl';
+    const isManager = isAdmin || isTL;
+
     const handleDeleteClick = (id) => {
+        if (!isManager) return;
         setTaskToDelete(id);
         setDeleteModalOpen(true);
         setOpenDropdownId(null);
@@ -152,8 +159,9 @@ const Tasks = () => {
             assignedTo: task.assignedTo?._id || '',
             dueDate: new Date(task.dueDate).toISOString().split('T')[0],
             priority: task.priority,
-            targetCards: task.targetCards || 0
+            targetCards: 10
         });
+        setUserSearchTerm(task.assignedTo?.name || '');
         setOpenDropdownId(null);
         setIsEditModalOpen(true);
     };
@@ -164,7 +172,8 @@ const Tasks = () => {
             await api.put(`/tasks/${editSelectedTask._id}`, formData);
             setIsEditModalOpen(false);
             setEditSelectedTask(null);
-            setFormData({ title: '', description: '', assignedTo: '', dueDate: '', priority: 'Medium', targetCards: 0 });
+            setFormData({ title: '', description: '', assignedTo: '', dueDate: '', priority: 'Medium', targetCards: 10 });
+            setUserSearchTerm('');
             fetchTasks();
         } catch (error) {
             alert(error.response?.data?.message || 'Error updating task');
@@ -203,6 +212,13 @@ const Tasks = () => {
         return matchesStatus && matchesSearch;
     });
 
+    const counts = {
+        All: tasks.length,
+        Pending: tasks.filter(t => t.status === 'Pending').length,
+        'In Progress': tasks.filter(t => t.status === 'In Progress').length,
+        Completed: tasks.filter(t => t.status === 'Completed').length,
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -210,14 +226,40 @@ const Tasks = () => {
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Task Management</h1>
                     <p className="text-gray-500 dark:text-slate-400">Track staff activities. Incentives calculated for sales above daily 10-card target.</p>
                 </div>
-                {user?.role === 'admin' ? (
-                    <button 
-                        onClick={() => setIsModalOpen(true)}
-                        className="bg-sbi-blue hover:bg-sbi-hover text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
-                    >
-                        <Plus size={20} />
-                        <span>Assign New Task</span>
-                    </button>
+                {isManager ? (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 rounded-xl font-bold border border-blue-200 dark:border-blue-500/20 shadow-sm">
+                            <Target size={18} />
+                            <span>Team Today: {todayCount} Cards</span>
+                        </div>
+                        <button 
+                            onClick={() => {
+                                const csvContent = "data:text/csv;charset=utf-8," 
+                                    + "Title,Description,Assigned To,Priority,Status,Due Date,Target Cards,Actual Cards\n"
+                                    + filteredTasks.map(t => `"${t.title}","${t.description}","${t.assignedTo?.name || 'Unassigned'}","${t.priority}","${t.status}","${new Date(t.dueDate).toLocaleDateString()}","${t.targetCards || 0}","${t.actualCards || 0}"`).join("\n");
+                                const encodedUri = encodeURI(csvContent);
+                                const link = document.createElement("a");
+                                link.setAttribute("href", encodedUri);
+                                link.setAttribute("download", "tasks_export.csv");
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                            }}
+                            className="bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 shadow-sm transition-colors active:scale-95"
+                        >
+                            Export CSV
+                        </button>
+                        <button 
+                            onClick={() => {
+                                setUserSearchTerm('');
+                                setIsModalOpen(true);
+                            }}
+                            className="bg-sbi-blue hover:bg-sbi-hover text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
+                        >
+                            <Plus size={20} />
+                            <span>Assign New Task</span>
+                        </button>
+                    </div>
                 ) : (
                     <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 rounded-xl font-bold border border-green-200 dark:border-green-500/20 shadow-sm">
                         <Target size={18} />
@@ -232,11 +274,14 @@ const Tasks = () => {
                     <button 
                         key={status}
                         onClick={() => setFilterStatus(status)}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${
                             filterStatus === status ? 'bg-sbi-blue text-white shadow-md' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700 dark:bg-slate-900/50'
                         }`}
                     >
                         {status}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${filterStatus === status ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-400'}`}>
+                            {counts[status]}
+                        </span>
                     </button>
                 ))}
             </div>
@@ -289,14 +334,17 @@ const Tasks = () => {
                                             <Target size={12} />
                                             {task.targetCards} Cards
                                         </span>
-                                        <span className={`font-bold ${task.actualCards >= task.targetCards ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}`}>
-                                            {task.actualCards || 0}/{task.targetCards}
+                                        <span className={`font-bold transition-colors ${(task.actualCards >= task.targetCards || task.status === 'Completed') ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                                            <span className="text-green-600 dark:text-green-400">{task.soldCards || 0}</span>
+                                            <span className="mx-1 text-gray-300 dark:text-slate-700">|</span>
+                                            <span className="text-amber-500">{task.pendingCards || 0}</span>
+                                            <span className="ml-1 text-gray-400">/ {task.targetCards}</span>
                                         </span>
                                     </div>
                                     <div className="w-full h-1.5 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                         <div 
                                             className={`h-full rounded-full transition-all duration-1000 ${
-                                                task.actualCards >= task.targetCards ? 'bg-green-500' : 'bg-blue-600'
+                                                (task.actualCards >= task.targetCards || task.status === 'Completed') ? 'bg-green-500' : 'bg-blue-600'
                                             }`}
                                             style={{ width: `${Math.min(((task.actualCards || 0) / task.targetCards) * 100, 100)}%` }}
                                         ></div>
@@ -343,7 +391,7 @@ const Tasks = () => {
                                 >
                                     Update
                                 </button>
-                                {user?.role === 'admin' && (
+                                {isManager && (
                                     <div className="relative">
                                         <button 
                                             onClick={() => setOpenDropdownId(openDropdownId === task._id ? null : task._id)} 
@@ -411,16 +459,54 @@ const Tasks = () => {
                             <input name="dueDate" type="date" required value={formData.dueDate} onChange={handleInputChange} className="w-full p-3 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue" />
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Target Cards (Optional)</label>
-                        <input name="targetCards" type="number" value={formData.targetCards} onChange={handleInputChange} className="w-full p-3 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue h-12" placeholder="e.g. 15" />
-                    </div>
-                    <div>
+                    <div className="relative">
                         <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Assign To</label>
-                        <select name="assignedTo" required value={formData.assignedTo} onChange={handleInputChange} className="w-full p-3 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue bg-white dark:bg-slate-950">
-                            <option value="">Select Staff</option>
-                            {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
-                        </select>
+                        <div className="relative group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-sbi-blue transition-colors" size={16} />
+                            <input 
+                                type="text"
+                                placeholder="Search Staff by name..."
+                                className={`w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-950 border ${!formData.assignedTo && userSearchTerm ? 'border-red-300' : 'border-gray-200 dark:border-gray-800'} rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue/30 focus:border-sbi-blue transition-all font-medium text-gray-900 dark:text-white`}
+                                value={userSearchTerm}
+                                onChange={(e) => {
+                                    setUserSearchTerm(e.target.value);
+                                    if (formData.assignedTo) setFormData({ ...formData, assignedTo: '' });
+                                }}
+                            />
+                            {formData.assignedTo && (
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-green-500 text-white p-0.5 rounded-full">
+                                    <CheckCircle size={14} />
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Dropdown Results */}
+                        {userSearchTerm.length > 0 && !formData.assignedTo && (
+                            <div className="absolute z-[60] w-full mt-2 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 duration-200">
+                                {users.filter(u => 
+                                    (u.name && u.name.toLowerCase().includes(userSearchTerm.toLowerCase()))
+                                ).map(u => (
+                                    <button
+                                        key={u._id}
+                                        type="button"
+                                        onClick={() => {
+                                            setFormData({ ...formData, assignedTo: u._id });
+                                            setUserSearchTerm(u.name);
+                                        }}
+                                        className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors border-b border-gray-50 dark:border-slate-800/50 last:border-0"
+                                    >
+                                        <p className="font-bold text-gray-900 dark:text-slate-100">{u.name}</p>
+                                    </button>
+                                ))}
+                                {users.filter(u => 
+                                    (u.name && u.name.toLowerCase().includes(userSearchTerm.toLowerCase()))
+                                ).length === 0 && (
+                                    <div className="p-4 text-center text-gray-400 font-medium text-sm">
+                                        No staff found
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <button type="submit" className="w-full bg-sbi-blue text-white py-4 rounded-xl font-bold text-lg hover:bg-sbi-hover transition-all active:scale-95 shadow-lg mt-4">
                         Confirm Assignment
@@ -453,16 +539,54 @@ const Tasks = () => {
                             <input name="dueDate" type="date" required value={formData.dueDate} onChange={handleInputChange} className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue text-gray-900 dark:text-white dark:bg-slate-950" />
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Target Cards (Optional)</label>
-                        <input name="targetCards" type="number" value={formData.targetCards} onChange={handleInputChange} className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue text-gray-900 dark:text-white dark:bg-slate-950 h-12" placeholder="e.g. 15" />
-                    </div>
-                    <div>
+                    <div className="relative">
                         <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Assign To</label>
-                        <select name="assignedTo" required value={formData.assignedTo} onChange={handleInputChange} className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue text-gray-900 dark:text-white bg-white dark:bg-slate-950">
-                            <option value="">Select Staff</option>
-                            {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
-                        </select>
+                        <div className="relative group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-sbi-blue transition-colors" size={16} />
+                            <input 
+                                type="text"
+                                placeholder="Search Staff by name..."
+                                className={`w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-sbi-blue text-gray-900 dark:text-white transition-all`}
+                                value={userSearchTerm}
+                                onChange={(e) => {
+                                    setUserSearchTerm(e.target.value);
+                                    if (formData.assignedTo) setFormData({ ...formData, assignedTo: '' });
+                                }}
+                            />
+                            {formData.assignedTo && (
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-green-500 text-white p-0.5 rounded-full">
+                                    <CheckCircle size={14} />
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Dropdown Results */}
+                        {userSearchTerm.length > 0 && !formData.assignedTo && (
+                            <div className="absolute z-[60] w-full mt-2 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 duration-200">
+                                {users.filter(u => 
+                                    (u.name && u.name.toLowerCase().includes(userSearchTerm.toLowerCase()))
+                                ).map(u => (
+                                    <button
+                                        key={u._id}
+                                        type="button"
+                                        onClick={() => {
+                                            setFormData({ ...formData, assignedTo: u._id });
+                                            setUserSearchTerm(u.name);
+                                        }}
+                                        className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors border-b border-gray-50 dark:border-slate-800/50 last:border-0"
+                                    >
+                                        <p className="font-bold text-gray-900 dark:text-slate-100">{u.name}</p>
+                                    </button>
+                                ))}
+                                {users.filter(u => 
+                                    (u.name && u.name.toLowerCase().includes(userSearchTerm.toLowerCase()))
+                                ).length === 0 && (
+                                    <div className="p-4 text-center text-gray-400 font-medium text-sm">
+                                        No staff found
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <button type="submit" className="w-full bg-sbi-blue text-white py-4 rounded-xl font-bold text-lg hover:bg-sbi-hover transition-all active:scale-95 shadow-lg mt-4">
                         Save Changes

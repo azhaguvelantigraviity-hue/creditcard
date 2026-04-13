@@ -3,19 +3,35 @@ const Lead = require('../models/Lead');
 const Sale = require('../models/Sale');
 const Attendance = require('../models/Attendance');
 const CallLog = require('../models/CallLog');
+const Task = require('../models/Task');
 
 const getDashboardStats = async (req, res) => {
     try {
         const isAdmin = req.user.role === 'admin';
+        const isTL = req.user.role === 'tl';
         const userId = req.user._id;
 
-        // Base match object for queries based on role
-        const matchBase = isAdmin ? {} : { sellerId: userId };
-        const leadMatchBase = isAdmin ? {} : { assignedTo: userId };
-        const userMatchBase = isAdmin ? {} : { userId: userId };
+        let matchBase = {};
+        let leadMatchBase = {};
+        let userMatchBase = {};
+        let filterSellers = [];
+
+        if (isTL) {
+            const teamUsers = await User.find({ teamLeaderId: userId }).select('_id');
+            filterSellers = teamUsers.map(u => u._id);
+            filterSellers.push(userId); // Include TL's personal stats as well implicitly
+            
+            matchBase = { sellerId: { $in: filterSellers } };
+            leadMatchBase = { assignedTo: { $in: filterSellers } };
+            userMatchBase = { userId: { $in: filterSellers } };
+        } else if (!isAdmin) {
+            matchBase = { sellerId: userId };
+            leadMatchBase = { assignedTo: userId };
+            userMatchBase = { userId: userId };
+        }
 
         // 1. Basic KPI Cards
-        const totalSellers = isAdmin ? await User.countDocuments({ role: 'seller' }) : await Sale.countDocuments({ sellerId: userId });
+        const totalSellers = isAdmin ? await User.countDocuments({ role: 'seller' }) : (isTL ? filterSellers.length : await Sale.countDocuments({ sellerId: userId }));
         const totalLeads = await Lead.countDocuments(leadMatchBase);
         const activeLeads = await Lead.countDocuments({ ...leadMatchBase, status: { $ne: 'Converted' } });
         
@@ -154,6 +170,75 @@ const getDashboardStats = async (req, res) => {
             timeLabel: getTimeAgo(act.time)
         }));
 
+        // 4. TL/Admin Specific: Team Performance Today (Calls & Tasks)
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Task Stats
+        const tasks = await Task.find({
+            assignedTo: { $in: filterSellers.length > 0 ? filterSellers : [userId] }
+        });
+        const taskStats = {
+            pending: tasks.filter(t => t.status === 'Pending').length,
+            inProgress: tasks.filter(t => t.status === 'In Progress').length,
+            completedToday: tasks.filter(t => t.status === 'Completed' && t.updatedAt >= startOfDay).length
+        };
+
+        // Call Stats
+        const calls = await CallLog.find({
+            sellerId: { $in: filterSellers.length > 0 ? filterSellers : [userId] },
+            createdAt: { $gte: startOfDay, $lte: endOfDay }
+        });
+        
+        const totalCalls = calls.length;
+        const missedCalls = calls.filter(c => ['No Answer', 'Busy'].includes(c.outcome)).length;
+        const answeredCalls = totalCalls - missedCalls;
+        
+        // Duration Calculation
+        let totalSecs = 0;
+        let validDurations = 0;
+        calls.forEach(c => {
+            if (c.duration) {
+                const minMatch = c.duration.match(/(\d+)m/);
+                const secMatch = c.duration.match(/(\d+)s/);
+                const m = minMatch ? parseInt(minMatch[1]) : 0;
+                const s = secMatch ? parseInt(secMatch[1]) : 0;
+                if (m || s) {
+                    totalSecs += (m * 60) + s;
+                    validDurations++;
+                }
+            }
+        });
+        const avgSecs = validDurations > 0 ? totalSecs / validDurations : 0;
+        const avgDuration = `${Math.floor(avgSecs / 60)}m ${Math.floor(avgSecs % 60)}s`;
+
+        const callStats = { totalCalls, answeredCalls, missedCalls, avgDuration };
+
+        // 5. Employee performance (List of sellers with counts)
+        let teamPerformance = [];
+        if (isAdmin || isTL) {
+            const sellersForPerf = await User.find(isTL ? { teamLeaderId: userId } : { role: 'seller' }).select('name status');
+            const activeAttendances = await Attendance.find({ isActive: true }).select('userId');
+            const activeUserIds = activeAttendances.map(a => a.userId.toString());
+
+            for (const seller of sellersForPerf) {
+                const sCalls = calls.filter(c => c.sellerId.toString() === seller._id.toString()).length;
+                const sSales = await Sale.countDocuments({ sellerId: seller._id, createdAt: { $gte: startOfDay, $lte: endOfDay } });
+                const sTasks = tasks.filter(t => t.assignedTo.toString() === seller._id.toString() && t.status === 'Completed' && t.updatedAt >= startOfDay).length;
+                const isOnline = activeUserIds.includes(seller._id.toString());
+                
+                teamPerformance.push({
+                    name: seller.name,
+                    calls: sCalls,
+                    sales: sSales,
+                    tasks: sTasks,
+                    status: isOnline ? 'Online' : 'Offline' 
+                });
+            }
+        }
+
         res.json({
             totalSellers,
             activeLeads,
@@ -161,6 +246,9 @@ const getDashboardStats = async (req, res) => {
             conversionRate,
             chartData,
             recentActivities,
+            taskStats,
+            callStats,
+            teamPerformance,
             trend: {
                 sellers: isAdmin ? 12 : 8,
                 leads: isAdmin ? -5 : -2,

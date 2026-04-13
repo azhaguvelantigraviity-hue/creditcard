@@ -44,15 +44,15 @@ const DashboardLayout = ({ children }) => {
     };
 
     const menuItems = [
-        { name: 'Overview', icon: LayoutDashboard, path: '/', roles: ['admin', 'seller'] },
+        { name: 'Overview', icon: LayoutDashboard, path: '/', roles: ['admin', 'tl', 'seller'] },
         { name: 'Staff Management', icon: Users, path: '/users', roles: ['admin'] },
-        { name: 'Leads', icon: Target, path: '/leads', roles: ['admin', 'seller'] },
-        { name: 'Attendance', icon: Calendar, path: '/attendance', roles: ['admin', 'seller'] },
-        { name: 'Calls Tracking', icon: Phone, path: '/calls', roles: ['admin', 'seller'] },
-        { name: 'Tasks', icon: CheckSquare, path: '/tasks', roles: ['admin', 'seller'] },
-        { name: 'Sales Success', icon: TrendingUp, path: '/sales', roles: ['admin', 'seller'] },
-        { name: 'Incentives', icon: Coins, path: '/incentives', roles: ['admin', 'seller'] },
-        { name: 'Permission', icon: Shield, path: '/permission', roles: ['admin', 'seller'] },
+        { name: 'Leads', icon: Target, path: '/leads', roles: ['admin', 'tl', 'seller'] },
+        { name: 'Attendance', icon: Calendar, path: '/attendance', roles: ['admin', 'tl', 'seller'] },
+        { name: 'Calls Tracking', icon: Phone, path: '/calls', roles: ['admin', 'tl', 'seller'] },
+        { name: 'Tasks', icon: CheckSquare, path: '/tasks', roles: ['admin', 'tl', 'seller'] },
+        { name: 'Sales Success', icon: TrendingUp, path: '/sales', roles: ['admin', 'tl', 'seller'] },
+        { name: 'Incentives', icon: Coins, path: '/incentives', roles: ['admin', 'tl', 'seller'] },
+        { name: 'Permission', icon: Shield, path: '/permission', roles: ['admin', 'tl', 'seller'] },
         { name: 'Settings', icon: AlignLeft, path: '/settings', roles: ['admin'] },
     ];
 

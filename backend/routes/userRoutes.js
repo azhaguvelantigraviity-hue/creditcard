@@ -5,12 +5,11 @@ const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
 
 router.use(protect);
-router.use(authorize('admin'));
 
-router.get('/', getUsers);
-router.post('/', createUser);
-router.put('/:id', updateUser);
-router.put('/:id/face', updateFaceDescriptor);
-router.delete('/:id', deleteUser);
+router.get('/', authorize('admin', 'tl'), getUsers);
+router.post('/', authorize('admin'), createUser);
+router.put('/:id', authorize('admin'), updateUser);
+router.put('/:id/face', authorize('admin'), updateFaceDescriptor);
+router.delete('/:id', authorize('admin'), deleteUser);
 
 module.exports = router;

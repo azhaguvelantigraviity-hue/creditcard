@@ -12,7 +12,8 @@ import {
     FileText,
     AlertCircle,
     CheckCircle2,
-    XCircle
+    XCircle,
+    Trash2
 } from 'lucide-react';
 
 const Modal = ({ isOpen, onClose, title, children }) => {
@@ -33,11 +34,27 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     );
 };
 
+const formatDuration = (val) => {
+    if (!val) return '-';
+    const str = String(val).trim();
+    // If it already has letters (like 'hr', 'mins'), just return it
+    if (/[a-zA-Z]/.test(str)) return str;
+    
+    // Otherwise it's just numbers, infer hrs vs mins based on magnitude
+    const num = Number(str);
+    if (!isNaN(num)) {
+        if (num > 10) return `${num} Mins`;
+        return num <= 1 ? `${num} Hr` : `${num} Hrs`;
+    }
+    return str;
+};
+
 const Permission = () => {
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
     const [permissions, setPermissions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [notification, setNotification] = useState(null);
     const [formData, setFormData] = useState({
@@ -51,9 +68,18 @@ const Permission = () => {
 
     useEffect(() => {
         fetchPermissions();
+        
+        // Auto-refresh every 60 seconds
+        const interval = setInterval(() => {
+            fetchPermissions(true);
+        }, 60000);
+
+        return () => clearInterval(interval);
     }, []);
 
-    const fetchPermissions = async () => {
+    const fetchPermissions = async (silent = false) => {
+        if (!silent) setLoading(true);
+        if (silent) setIsSyncing(true);
         try {
             const { data } = await api.get('/permissions');
             setPermissions(data);
@@ -61,6 +87,9 @@ const Permission = () => {
             console.error('Error fetching permissions:', error);
         } finally {
             setLoading(false);
+            if (silent) {
+                setTimeout(() => setIsSyncing(false), 2000);
+            }
         }
     };
 
@@ -95,6 +124,17 @@ const Permission = () => {
             showNotification(`Permission ${status === 'Approved' ? 'Approved' : 'Rejected'}`);
         } catch (error) {
             alert(error.response?.data?.message || 'Error updating status');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this permission record? This action cannot be undone.')) return;
+        try {
+            await api.delete(`/permissions/${id}`);
+            fetchPermissions(true);
+            showNotification('Permission record deleted');
+        } catch (error) {
+            alert(error.response?.data?.message || 'Error deleting record');
         }
     };
 
@@ -145,7 +185,9 @@ const Permission = () => {
                     <h2 className="text-xl font-black text-gray-900 dark:text-slate-100 uppercase tracking-tighter">Permission Ledger</h2>
                     <div className="flex items-center gap-4">
                         <span className="text-xs font-bold text-gray-400 dark:text-slate-500 flex items-center gap-1.5 uppercase tracking-widest leading-none">
-                            <Clock size={14} /> Real-time Sync
+                            <Clock size={14} className={isSyncing ? "animate-spin text-blue-500" : ""} /> 
+                            Real-time Sync
+                            {isSyncing && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse ml-1" />}
                         </span>
                     </div>
                 </div>
@@ -168,11 +210,11 @@ const Permission = () => {
                                     <td className="px-8 py-6">
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20 ring-1 ring-white/10 uppercase">
-                                                {isAdmin ? perm.userId?.name?.charAt(0) : user.name.charAt(0)}
+                                                {(perm.userId?.name || user?.name || 'S').charAt(0)}
                                             </div>
                                             <div>
-                                                <p className="font-black text-gray-900 dark:text-slate-100 tracking-tight">{isAdmin ? perm.userId?.name : user.name}</p>
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{isAdmin ? perm.userId?.role : user.role}</p>
+                                                <p className="font-black text-gray-900 dark:text-slate-100 tracking-tight">{perm.userId?.name || user?.name}</p>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{perm.userId?.role || user?.role}</p>
                                             </div>
                                         </div>
                                     </td>
@@ -186,7 +228,7 @@ const Permission = () => {
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-sm font-black text-gray-900 dark:text-slate-100 italic">
-                                        {perm.duration}
+                                        {formatDuration(perm.duration)}
                                     </td>
                                     <td className="px-8 py-6">
                                         <span className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest ${
@@ -201,30 +243,43 @@ const Permission = () => {
                                         </td>
                                     )}
                                     <td className="px-8 py-6">
-                                        <div className="flex items-center justify-center gap-3">
-                                            {perm.status === 'Pending' && isAdmin ? (
-                                                <>
-                                                    <button 
-                                                        onClick={() => handleStatusUpdate(perm._id, 'Approved')}
-                                                        className="w-9 h-9 flex items-center justify-center bg-green-500 text-white rounded-xl hover:bg-green-600 hover:scale-110 active:scale-95 transition-all shadow-lg shadow-green-500/30"
-                                                        title="Approve"
-                                                    >
-                                                        <Check size={20} strokeWidth={3} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleStatusUpdate(perm._id, 'Rejected')}
-                                                        className="w-9 h-9 flex items-center justify-center bg-red-500 text-white rounded-xl hover:bg-red-600 hover:scale-110 active:scale-95 transition-all shadow-lg shadow-red-500/30"
-                                                        title="Reject"
-                                                    >
-                                                        <X size={20} strokeWidth={3} />
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <span className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest shadow-sm ${getStatusStyle(perm.status)}`}>
-                                                    {perm.status === 'Approved' && <Check size={10} className="inline mr-1" strokeWidth={4} />}
-                                                    {perm.status === 'Rejected' && <X size={10} className="inline mr-1" strokeWidth={4} />}
-                                                    {perm.status}
-                                                </span>
+                                        <div className="flex items-center justify-center gap-2">
+                                            <div className="flex items-center gap-2">
+                                                {perm.status === 'Pending' && isAdmin ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => handleStatusUpdate(perm._id, 'Approved')}
+                                                            className="w-9 h-9 flex items-center justify-center bg-green-500 text-white rounded-xl hover:bg-green-600 hover:scale-110 active:scale-95 transition-all shadow-lg shadow-green-500/30"
+                                                            title="Approve"
+                                                        >
+                                                            <Check size={20} strokeWidth={3} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleStatusUpdate(perm._id, 'Rejected')}
+                                                            className="w-9 h-9 flex items-center justify-center bg-red-500 text-white rounded-xl hover:bg-red-600 hover:scale-110 active:scale-95 transition-all shadow-lg shadow-red-500/30"
+                                                            title="Reject"
+                                                        >
+                                                            <X size={20} strokeWidth={3} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest shadow-sm ${getStatusStyle(perm.status)}`}>
+                                                        {perm.status === 'Approved' && <Check size={10} className="inline mr-1" strokeWidth={4} />}
+                                                        {perm.status === 'Rejected' && <X size={10} className="inline mr-1" strokeWidth={4} />}
+                                                        {perm.status}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Delete Option */}
+                                            {(isAdmin || perm.status === 'Pending') && (
+                                                <button 
+                                                    onClick={() => handleDelete(perm._id)}
+                                                    className="w-9 h-9 flex items-center justify-center bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-slate-400 hover:bg-red-500 hover:text-white dark:hover:bg-red-500 rounded-xl transition-all active:scale-95"
+                                                    title="Delete Record"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
                                             )}
                                         </div>
                                     </td>

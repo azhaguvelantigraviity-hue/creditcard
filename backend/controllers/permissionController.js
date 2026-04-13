@@ -30,7 +30,7 @@ const getPermissions = async (req, res) => {
         if (req.user.role === 'admin') {
             permissions = await Permission.find({}).populate('userId', 'name email role').sort({ createdAt: -1 });
         } else {
-            permissions = await Permission.find({ userId: req.user._id }).sort({ createdAt: -1 });
+            permissions = await Permission.find({ userId: req.user._id }).populate('userId', 'name email role').sort({ createdAt: -1 });
         }
         res.json(permissions);
     } catch (error) {
@@ -62,8 +62,36 @@ const updatePermissionStatus = async (req, res) => {
     }
 };
 
+// @desc    Delete a permission request
+// @route   DELETE /api/permissions/:id
+// @access  Private
+const deletePermission = async (req, res) => {
+    try {
+        const permission = await Permission.findById(req.params.id);
+        if (!permission) {
+            return res.status(404).json({ message: 'Permission request not found' });
+        }
+
+        // Only Admin can delete anything, Seller can only delete their own PENDING requests
+        if (req.user.role !== 'admin') {
+            if (permission.userId.toString() !== req.user._id.toString()) {
+                return res.status(403).json({ message: 'Not authorized' });
+            }
+            if (permission.status !== 'Pending') {
+                return res.status(400).json({ message: 'Only pending requests can be deleted by users' });
+            }
+        }
+
+        await permission.deleteOne();
+        res.json({ message: 'Permission record deleted successfully' });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
 module.exports = {
     createPermission,
     getPermissions,
-    updatePermissionStatus
+    updatePermissionStatus,
+    deletePermission
 };

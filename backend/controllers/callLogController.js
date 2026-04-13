@@ -1,5 +1,6 @@
 const CallLog = require('../models/CallLog');
 const Lead = require('../models/Lead');
+const User = require('../models/User');
 
 // @desc    Create a new call log
 // @route   POST /api/calls
@@ -33,7 +34,12 @@ const createCallLog = async (req, res) => {
 const getCallLogs = async (req, res) => {
     try {
         let query = {};
-        if (req.user.role !== 'admin') {
+        if (req.user.role === 'tl') {
+            const teamUsers = await User.find({ teamLeaderId: req.user._id }).select('_id');
+            const teamIds = teamUsers.map(u => u._id);
+            teamIds.push(req.user._id);
+            query.sellerId = { $in: teamIds };
+        } else if (req.user.role !== 'admin') {
             query.sellerId = req.user._id;
         }
 
@@ -57,21 +63,48 @@ const getCallStats = async (req, res) => {
         today.setHours(0, 0, 0, 0);
 
         let query = { createdAt: { $gte: today } };
-        if (req.user.role !== 'admin') {
+        if (req.user.role === 'tl') {
+            const teamUsers = await User.find({ teamLeaderId: req.user._id }).select('_id');
+            const teamIds = teamUsers.map(u => u._id);
+            teamIds.push(req.user._id);
+            query.sellerId = { $in: teamIds };
+        } else if (req.user.role !== 'admin') {
             query.sellerId = req.user._id;
         }
 
         const logs = await CallLog.find(query);
         
         const totalCalls = logs.length;
-        const interestedCalls = logs.filter(l => l.outcome === 'Interested').length;
-        const successRate = totalCalls > 0 ? ((interestedCalls / totalCalls) * 100).toFixed(0) : 0;
+        const missedCalls = logs.filter(l => ['No Answer', 'Busy'].includes(l.outcome)).length;
+        const answeredCalls = totalCalls - missedCalls;
+
+        let totalSecs = 0;
+        let countWithDuration = 0;
+        logs.forEach(l => {
+            if (l.duration) {
+                let m = 0; let s = 0;
+                let minMatch = l.duration.match(/(\d+)m/);
+                let secMatch = l.duration.match(/(\d+)s/);
+                let fallbackMatch = l.duration.match(/^\s*(\d+)\s*$/); // Pure numbers assumed seconds
+
+                if (minMatch) m = parseInt(minMatch[1]);
+                if (secMatch) s = parseInt(secMatch[1]);
+                if (fallbackMatch) s = parseInt(fallbackMatch[1]);
+
+                totalSecs += (m * 60) + s;
+                countWithDuration++;
+            }
+        });
+
+        let avgSecs = countWithDuration > 0 ? totalSecs / countWithDuration : 0;
+        let avgMins = Math.floor(avgSecs / 60);
+        let remainSecs = Math.floor(avgSecs % 60);
 
         res.json({
             totalCalls,
-            successRate: `${successRate}%`,
-            avgDuration: '3m 15s', // Placeholder as duration is string
-            missedTasks: 0 // Placeholder
+            answeredCalls,
+            missedCalls,
+            avgDuration: countWithDuration > 0 ? `${avgMins}m ${remainSecs}s` : '0m 0s'
         });
     } catch (error) {
         res.status(500).json({ message: error.message });

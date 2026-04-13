@@ -1,12 +1,29 @@
 const User = require('../models/User');
+const Attendance = require('../models/Attendance');
 
 // @desc    Get all users (Admin only)
 // @route   GET /api/users
 // @access  Private/Admin
 const getUsers = async (req, res) => {
     try {
-        const users = await User.find({}).select('-password');
-        res.json(users);
+        let query = {};
+        if (req.user.role === 'tl') {
+            query.teamLeaderId = req.user._id;
+        }
+
+        let users = await User.find(query).populate('teamLeaderId', 'name email').select('-password');
+        
+        // Enhance with online status
+        const activeAttendances = await Attendance.find({ isActive: true }).select('userId');
+        const activeUserIds = activeAttendances.map(a => a.userId.toString());
+        
+        const enhancedUsers = users.map(user => {
+            const userObj = user.toObject();
+            userObj.isOnline = activeUserIds.includes(user._id.toString());
+            return userObj;
+        });
+
+        res.json(enhancedUsers);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -17,7 +34,7 @@ const getUsers = async (req, res) => {
 // @access  Private/Admin
 const createUser = async (req, res) => {
     try {
-        const { name, email, role, phoneNumber, status, faceDescriptor } = req.body;
+        const { name, email, role, phoneNumber, status, faceDescriptor, teamLeaderId } = req.body;
 
         const userExists = await User.findOne({ email });
 
@@ -35,7 +52,8 @@ const createUser = async (req, res) => {
             role: role || 'seller',
             phoneNumber: phoneNumber || '0000000000',
             status: status || 'active',
-            faceDescriptor: faceDescriptor || []
+            faceDescriptor: faceDescriptor || [],
+            teamLeaderId: teamLeaderId || null
         });
 
         if (user) {
@@ -68,6 +86,10 @@ const updateUser = async (req, res) => {
             user.role = req.body.role || user.role;
             user.status = req.body.status || user.status;
             user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
+            
+            if (req.body.teamLeaderId !== undefined) {
+                user.teamLeaderId = req.body.teamLeaderId || null;
+            }
 
             if (req.body.password) {
                 user.password = req.body.password;

@@ -57,39 +57,54 @@ const Incentives = () => {
     const [target, setTarget] = useState(10);
     const [showStatsModal, setShowStatsModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const ledgerRef = useRef(null);
+    const pollRef = useRef(null);
+
+    const fetchData = async (isBackground = false) => {
+        if (!isBackground) setIsLoading(true);
+        else setIsRefreshing(true);
+
+        try {
+            if (isAdmin) {
+                const [summaryRes, settingsRes] = await Promise.all([
+                    api.get('/incentives/dashboard-summary'),
+                    api.get('/attendance/settings')
+                ]);
+                setAdminSummary(summaryRes.data);
+                setTarget(settingsRes.data?.dailyTarget || 10);
+            } else {
+                const [statsRes, ledgerRes, monthlyRes, settingsRes] = await Promise.all([
+                    api.get('/incentives/stats'),
+                    api.get('/incentives/ledger'),
+                    api.get('/incentives/monthly'),
+                    api.get('/attendance/settings')
+                ]);
+
+                setStats(statsRes.data);
+                setLedger(ledgerRes.data);
+                setMonthlyData(monthlyRes.data);
+                setTarget(settingsRes.data?.dailyTarget || 10);
+            }
+        } catch (error) {
+            console.error('Error fetching incentives:', error);
+        } finally {
+            setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                if (isAdmin) {
-                    const [summaryRes, settingsRes] = await Promise.all([
-                        api.get('/incentives/dashboard-summary'),
-                        api.get('/attendance/settings')
-                    ]);
-                    setAdminSummary(summaryRes.data);
-                    setTarget(settingsRes.data?.dailyTarget || 10);
-                } else {
-                    const [statsRes, ledgerRes, monthlyRes, settingsRes] = await Promise.all([
-                        api.get('/incentives/stats'),
-                        api.get('/incentives/ledger'),
-                        api.get('/incentives/monthly'),
-                        api.get('/attendance/settings')
-                    ]);
-    
-                    setStats(statsRes.data);
-                    setLedger(ledgerRes.data);
-                    setMonthlyData(monthlyRes.data);
-                    setTarget(settingsRes.data?.dailyTarget || 10);
-                }
-            } catch (error) {
-                console.error('Error fetching incentives:', error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
         fetchData();
+
+        // Background polling every 60 seconds
+        pollRef.current = setInterval(() => {
+            fetchData(true);
+        }, 60000);
+
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current);
+        };
     }, [isAdmin]);
 
     const totalCardsSold = adminSummary.reduce((sum, i) => sum + (i.cardsSold || 0), 0);
@@ -121,7 +136,7 @@ const Incentives = () => {
 
     if (isAdmin) {
         return (
-            <div className="max-w-7xl mx-auto space-y-8 pb-12 bg-gray-50 dark:bg-slate-900/50/30 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-7xl mx-auto space-y-8 pb-12 dark:bg-transparent px-4 sm:px-6 lg:px-8">
                 <div className="bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#1e3a8a] p-12 rounded-[2.5rem] shadow-[0_20px_50px_rgba(30,58,138,0.2)] relative overflow-hidden text-white group border border-white/10">
                     <div className="absolute right-0 top-0 p-12 opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-1000">
                         <Users size={220} className="text-white" />
@@ -131,7 +146,15 @@ const Incentives = () => {
                     <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10">
                         <div className="space-y-6">
                             <div>
-                                <h1 className="text-5xl font-black tracking-tight mb-4 leading-none uppercase">Team <span className="text-blue-200">Incentives</span></h1>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
+                                <h1 className="text-5xl font-black tracking-tight leading-none uppercase">Team <span className="text-blue-200">Incentives</span></h1>
+                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all duration-500 w-fit ${
+                                    isRefreshing ? 'bg-blue-400/20 text-blue-200 border-blue-400/30 animate-pulse' : 'bg-green-500/20 text-green-400 border-green-500/30'
+                                }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${isRefreshing ? 'bg-blue-400' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'}`}></span>
+                                    {isRefreshing ? 'Syncing...' : 'Live Data'}
+                                </div>
+                            </div>
                                 <p className="text-blue-100/80 font-medium text-xl max-w-lg leading-relaxed">
                                     Overview of staff approved card sales and calculated incentive payouts. Incentives start after {target} cards daily.
                                 </p>
@@ -245,22 +268,25 @@ const Incentives = () => {
                             </tbody>
                             <tfoot>
                                 <tr className="border-t-[3px] border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800">
-                                    <td className="p-6 text-left">
+                                    <td className="p-6 text-left" colSpan="2">
                                         <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest">
-                                            Total
+                                            Total Group Performance
                                         </span>
                                     </td>
                                     <td className="p-6 text-center">
-                                        <span className="text-lg font-black text-gray-900 dark:text-white">{totalCardsSold}</span>
+                                        <span className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 font-bold border border-blue-100 dark:border-blue-500/20 shadow-sm text-base">
+                                            {totalCardsSold}
+                                        </span>
                                     </td>
                                     <td className="p-6 text-center">
-                                        <span className="text-gray-400 dark:text-slate-500 font-medium">₹200</span>
-                                    </td>
-                                    <td className="p-6 text-center">
-                                        <span className="text-lg font-black text-orange-600 dark:text-orange-400">₹{totalPending.toLocaleString()}</span>
+                                        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold border border-orange-100 dark:border-orange-500/20 shadow-sm">
+                                            ₹{totalPending.toLocaleString()}
+                                        </span>
                                     </td>
                                     <td className="p-6 text-right">
-                                        <span className="text-2xl font-black text-green-600 dark:text-green-400">₹{totalIncentiveAmt.toLocaleString()}</span>
+                                        <span className="text-2xl font-black text-green-600 dark:text-green-400">
+                                            ₹{totalIncentiveAmt.toLocaleString()}
+                                        </span>
                                     </td>
                                 </tr>
                             </tfoot>
@@ -272,7 +298,7 @@ const Incentives = () => {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 pb-12 bg-gray-50 dark:bg-slate-900/50/30 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto space-y-8 pb-12 dark:bg-transparent px-4 sm:px-6 lg:px-8">
             {/* HERO SECTION - Premium Fintech Redesign */}
             <div className="bg-gradient-to-br from-[#1e3a8a] via-[#1e40af] to-[#1e3a8a] p-12 rounded-[2.5rem] shadow-[0_20px_50px_rgba(30,58,138,0.2)] relative overflow-hidden text-white group border border-white/10">
                 <div className="absolute right-0 top-0 p-12 opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-1000">
@@ -291,7 +317,15 @@ const Incentives = () => {
                             </div>
                         </div>
                         <div>
-                            <h1 className="text-5xl font-black tracking-tight mb-4 leading-none uppercase">Earnings <span className="text-blue-200">Dashboard</span></h1>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
+                            <h1 className="text-5xl font-black tracking-tight leading-none uppercase">Earnings <span className="text-blue-200">Dashboard</span></h1>
+                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all duration-500 w-fit ${
+                                isRefreshing ? 'bg-blue-400/20 text-blue-200 border-blue-400/30 animate-pulse' : 'bg-green-500/20 text-green-400 border-green-500/30'
+                            }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isRefreshing ? 'bg-blue-400' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'}`}></span>
+                                {isRefreshing ? 'Syncing...' : 'Live Data'}
+                            </div>
+                        </div>
                             <p className="text-blue-100/80 font-medium text-xl max-w-lg leading-relaxed">
                                 You’re crushing your conversion targets! Your current performance puts you in the elite league of sellers.
                             </p>
@@ -430,7 +464,7 @@ const Incentives = () => {
             {showStatsModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                        <div className="p-8 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-blue-50 dark:bg-blue-500/10/30">
+                        <div className="p-8 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-blue-50 dark:bg-slate-800">
                             <div>
                                 <h3 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Performance Insights</h3>
                                 <p className="text-gray-500 dark:text-slate-400 font-medium">Your monthly earnings breakdown</p>
