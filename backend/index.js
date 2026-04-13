@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
+const User = require('./models/User');
 
 // Import Routes
 const authRoutes = require('./routes/authRoutes');
@@ -56,6 +57,32 @@ connectDB().then(async () => {
             await settings.save();
             console.log('OfficeSettings updated with new defaults');
         }
+    }
+
+    // Initialize default accounts if database is empty
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+        console.log('Database empty. Initializing default accounts...');
+        
+        // Admin
+        await User.create({
+            name: 'SBI Admin',
+            email: 'admin@sbi.com',
+            password: 'adminpassword',
+            role: 'admin',
+            phoneNumber: '9876543210'
+        });
+
+        // Team Leader
+        await User.create({
+            name: 'Vikram Singh (TL)',
+            email: 'tl@sbi.com',
+            password: 'SBI@1234',
+            role: 'tl',
+            phoneNumber: '9000000001'
+        });
+        
+        console.log('Default Admin and TL accounts created.');
     }
 });
 
